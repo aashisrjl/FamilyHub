@@ -45,9 +45,6 @@ import { calculateDistance, formatDistance, getCurrentUserLocation } from '@/lib
 export default function MembersScreen() {
   const { user, profile, signOut, updateProfile, refreshProfile } = useAuthStore();
   const { family, members, membersReady, subscribe, incomingRing, clearIncomingRing, sendRingAlert, myLocation, updateMyLocation, setHomeLocation } = useFamilyStore();
-  const [showStatusModal, setShowStatusModal] = useState(false);
-  const [showEditName, setShowEditName] = useState(false);
-  const [displayName, setDisplayName] = useState('');
   const [ringing, setRinging] = useState(false);
   const [codeCopied, setCodeCopied] = useState(false);
   const [locating, setLocating] = useState(false);
@@ -69,17 +66,6 @@ export default function MembersScreen() {
     setTimeout(() => {
       setRinging(false);
     }, 800);
-  };
-
-  const handleStatusChange = async (status: MemberStatus) => {
-    await updateProfile({ status });
-    setShowStatusModal(false);
-  };
-
-  const handleEditName = async () => {
-    if (!displayName.trim()) return;
-    await updateProfile({ display_name: displayName.trim() });
-    setShowEditName(false);
   };
 
   const handleCopyCode = async () => {
@@ -329,54 +315,7 @@ export default function MembersScreen() {
               </TouchableOpacity>
             )}
 
-            {/* My Profile Card */}
-            <Text style={styles.sectionTitle}>My Profile</Text>
-            <View style={styles.profileCard}>
-              <Avatar
-                name={profile?.display_name ?? 'User'}
-                size={56}
-                status={profile?.status ?? 'online'}
-                colorIndex={colorIndexFor(user?.id ?? '')}
-              />
-              <View style={styles.profileInfo}>
-                <Text style={styles.profileName}>{profile?.display_name}</Text>
-                <Text style={styles.profileEmail}>{user?.email}</Text>
-                <TouchableOpacity
-                  style={[styles.statusBadge, { backgroundColor: currentSc.bg, marginTop: spacing.xs }]}
-                  onPress={() => setShowStatusModal(true)}
-                >
-                  <View style={[styles.statusDot, { backgroundColor: currentSc.dot }]} />
-                  <Text style={[styles.statusText, { color: currentSc.text }]}>{statusLabels[currentStatus]}</Text>
-                  <Pencil size={11} color={currentSc.text} strokeWidth={2} />
-                </TouchableOpacity>
-              </View>
-            </View>
-
-            <TouchableOpacity style={styles.editNameBtn} onPress={() => { setDisplayName(profile?.display_name ?? ''); setShowEditName(true); }}>
-              <UserIcon size={18} color={colors.primary[600]} strokeWidth={2} />
-              <Text style={styles.editNameText}>Edit Display Name</Text>
-            </TouchableOpacity>
-
-            {/* Settings Section */}
-            <Text style={styles.sectionTitle}>Settings</Text>
-            <View style={styles.settingsCard}>
-              <View style={styles.settingsRow}>
-                <Shield size={20} color={colors.neutral[500]} strokeWidth={2} />
-                <Text style={styles.settingsLabel}>Family Hub v1.0.0</Text>
-              </View>
-              <View style={styles.settingsDivider} />
-              <View style={styles.settingsRow}>
-                <Volume2 size={20} color={colors.neutral[500]} strokeWidth={2} />
-                <Text style={styles.settingsLabel}>Notifications & Sounds</Text>
-                <Text style={styles.settingsValue}>On</Text>
-              </View>
-            </View>
-
-            <TouchableOpacity style={styles.signOutBtn} onPress={signOut}>
-              <LogOut size={20} color={colors.error[500]} strokeWidth={2} />
-              <Text style={styles.signOutText}>Sign Out</Text>
-            </TouchableOpacity>
-
+            {/* Family Members Section */}
             <Text style={styles.sectionTitle}>Family Members ({members.length})</Text>
           </View>
         }
@@ -392,51 +331,6 @@ export default function MembersScreen() {
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
       />
-
-      {/* Status Picker Modal */}
-      <ModalBase
-        visible={showStatusModal}
-        onClose={() => setShowStatusModal(false)}
-        title="Set Your Status"
-      >
-        <View style={styles.statusOptions}>
-          {(['online', 'away', 'dnd'] as MemberStatus[]).map((s) => {
-            const sc = statusColors[s];
-            const active = currentStatus === s;
-            return (
-              <TouchableOpacity
-                key={s}
-                style={[styles.statusOption, active && { backgroundColor: sc.bg, borderColor: sc.text }]}
-                onPress={() => handleStatusChange(s)}
-              >
-                <View style={[styles.statusDot, { backgroundColor: sc.dot, width: 14, height: 14 }]} />
-                <Text style={[styles.statusOptionText, { color: active ? sc.text : colors.neutral[700] }]}>
-                  {statusLabels[s]}
-                </Text>
-                {active && <Check size={20} color={sc.text} strokeWidth={2} />}
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-      </ModalBase>
-
-      {/* Edit Name Modal */}
-      <ModalBase
-        visible={showEditName}
-        onClose={() => setShowEditName(false)}
-        title="Edit Display Name"
-      >
-        <View>
-          <TextInput
-            style={styles.nameInput}
-            placeholder="Display name"
-            placeholderTextColor={colors.neutral[400]}
-            value={displayName}
-            onChangeText={setDisplayName}
-          />
-          <Button label="Save" onPress={handleEditName} fullWidth size="lg" icon={<Check size={20} color={colors.neutral[0]} strokeWidth={2} />} />
-        </View>
-      </ModalBase>
     </View>
   );
 }

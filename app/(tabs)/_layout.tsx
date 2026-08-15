@@ -8,7 +8,7 @@ import { useFamilyStore } from '@/lib/family-store';
 import { stopMotorSession } from '@/lib/motor-utils';
 import { notifyRingReceived, notifySosAlert, requestNotificationPermissions, stopContinuousAlarm } from '@/lib/sound-notifications';
 import { Button } from '@/components/Button';
-import { Home, CheckSquare, MessageCircle, Users, BellRing, AlertTriangle, Droplets } from 'lucide-react-native';
+import { Home, CheckSquare, MessageCircle, Users, BellRing, AlertTriangle, Droplets, User } from 'lucide-react-native';
 
 export default function TabLayout() {
   const { user, profile } = useAuthStore();
@@ -123,6 +123,15 @@ export default function TabLayout() {
             title: 'Family',
             tabBarIcon: ({ size, color }) => (
               <Users size={size} color={color} strokeWidth={2} />
+            ),
+          }}
+        />
+        <Tabs.Screen
+          name="profile"
+          options={{
+            title: 'Profile',
+            tabBarIcon: ({ size, color }) => (
+              <User size={size} color={color} strokeWidth={2} />
             ),
           }}
         />
