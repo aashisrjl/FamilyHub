@@ -70,7 +70,7 @@ export default function AuthScreen() {
       setGoogleLoading(true);
 
       if (Platform.OS === 'web') {
-        const redirectUrl = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8081';
+        const redirectUrl = typeof window !== 'undefined' ? window.location.origin : 'https://familyhub.aashisrijal.com.np';
         const { error } = await supabase.auth.signInWithOAuth({
           provider: 'google',
           options: {
