@@ -143,9 +143,11 @@ export default function AuthScreen() {
     >
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
         <View style={styles.header}>
-          <View style={styles.logoWrap}>
-            <Home size={40} color={colors.primary[500]} strokeWidth={2} />
-          </View>
+          <Image
+            source={require('@/assets/images/icon.png')}
+            style={styles.logoImage}
+            resizeMode="contain"
+          />
           <Text style={styles.appName}>Family Hub</Text>
           <Text style={styles.tagline}>Your family, connected in real time.</Text>
         </View>
@@ -273,14 +275,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: spacing.xl,
   },
-  logoWrap: {
-    width: 80,
-    height: 80,
-    borderRadius: radius.xl,
-    backgroundColor: colors.primary[50],
-    alignItems: 'center',
-    justifyContent: 'center',
+  logoImage: {
+    width: 96,
+    height: 96,
     marginBottom: spacing.md,
+    borderRadius: radius.lg,
   },
   appName: {
     fontSize: 32,
