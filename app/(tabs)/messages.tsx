@@ -12,7 +12,7 @@ import {
   Modal,
   Pressable,
 } from 'react-native';
-import { Stack } from 'expo-router';
+import { Stack, useLocalSearchParams } from 'expo-router';
 import { useAuthStore } from '@/lib/auth-store';
 import { useFamilyStore } from '@/lib/family-store';
 import { supabase } from '@/lib/supabase';
@@ -43,10 +43,18 @@ import * as Haptics from 'expo-haptics';
 type ChatFilter = 'broadcast' | 'direct';
 
 export default function MessagesScreen() {
+  const params = useLocalSearchParams<{ directMemberId?: string }>();
   const { user, profile } = useAuthStore();
   const { family, members, subscribe } = useFamilyStore();
   const [filter, setFilter] = useState<ChatFilter>('broadcast');
   const [directMemberId, setDirectMemberId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (params.directMemberId) {
+      setFilter('direct');
+      setDirectMemberId(params.directMemberId);
+    }
+  }, [params.directMemberId]);
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(false);
   const [inputText, setInputText] = useState('');

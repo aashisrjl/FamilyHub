@@ -864,24 +864,28 @@ export default function DashboardScreen() {
               </View>
 
               <View style={styles.detailActionsRow}>
-                {detailMember.phone_number ? (
-                  <>
-                    <TouchableOpacity
-                      style={[styles.detailActionBtn, styles.callBtn]}
-                      onPress={() => Linking.openURL(`tel:${detailMember.phone_number}`)}
-                    >
-                      <Phone size={16} color={colors.neutral[0]} strokeWidth={2} />
-                      <Text style={styles.detailActionBtnText}>Call</Text>
-                    </TouchableOpacity>
+                {!isMe && (
+                  <TouchableOpacity
+                    style={[styles.detailActionBtn, styles.smsBtn]}
+                    onPress={() => {
+                      const targetId = detailMember.id;
+                      setDetailMember(null);
+                      router.push({ pathname: '/(tabs)/messages', params: { directMemberId: targetId } });
+                    }}
+                  >
+                    <MessageSquare size={16} color={colors.primary[700]} strokeWidth={2} />
+                    <Text style={styles.smsBtnText}>Message</Text>
+                  </TouchableOpacity>
+                )}
 
-                    <TouchableOpacity
-                      style={[styles.detailActionBtn, styles.smsBtn]}
-                      onPress={() => Linking.openURL(`sms:${detailMember.phone_number}`)}
-                    >
-                      <MessageSquare size={16} color={colors.primary[700]} strokeWidth={2} />
-                      <Text style={styles.smsBtnText}>SMS</Text>
-                    </TouchableOpacity>
-                  </>
+                {detailMember.phone_number ? (
+                  <TouchableOpacity
+                    style={[styles.detailActionBtn, styles.callBtn]}
+                    onPress={() => Linking.openURL(`tel:${detailMember.phone_number}`)}
+                  >
+                    <Phone size={16} color={colors.neutral[0]} strokeWidth={2} />
+                    <Text style={styles.detailActionBtnText}>Call</Text>
+                  </TouchableOpacity>
                 ) : null}
 
                 {!isMe && (
