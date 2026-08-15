@@ -24,13 +24,36 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   loading: true,
   error: null,
 
-  init: () => {
-    supabase.auth.getSession().then(({ data }) => {
-      set({ session: data.session, user: data.session?.user ?? null, loading: false });
-      if (data.session?.user) {
-        get().refreshProfile();
+  init: async () => {
+    // If returning from OAuth redirect with access_token in URL hash
+    if (typeof window !== 'undefined' && window.location.hash.includes('access_token=')) {
+      try {
+        const hashParams = new URLSearchParams(window.location.hash.substring(1));
+        const accessToken = hashParams.get('access_token');
+        const refreshToken = hashParams.get('refresh_token');
+
+        if (accessToken && refreshToken) {
+          const { data } = await supabase.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken,
+          });
+
+          if (data.session) {
+            set({ session: data.session, user: data.session.user, loading: false });
+            await get().refreshProfile();
+            window.history.replaceState(null, '', window.location.pathname);
+          }
+        }
+      } catch {
+        // silent fallback
       }
-    });
+    }
+
+    const { data } = await supabase.auth.getSession();
+    set({ session: data.session, user: data.session?.user ?? null, loading: false });
+    if (data.session?.user) {
+      get().refreshProfile();
+    }
 
     supabase.auth.onAuthStateChange((_event, session) => {
       set({ session, user: session?.user ?? null, loading: false });
