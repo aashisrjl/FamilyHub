@@ -13,6 +13,7 @@ import {
   notifySosAlert,
   playChime,
   speakNotification,
+  startContinuousAlarm,
 } from '@/lib/sound-notifications';
 import { Avatar } from '@/components/Avatar';
 import { Button } from '@/components/Button';
@@ -76,9 +77,11 @@ export default function DashboardScreen() {
   // Handle motor timer expiry
   const handleMotorExpire = useCallback(async (session: typeof activeMotorSession) => {
     if (!session) return;
-    await stopMotorSession(session.id, session.family_id);
+    useFamilyStore.getState().broadcastMotorAction('expire', null, session.tank, profile?.display_name);
+    await stopMotorSession(session.id, session.family_id, profile?.display_name);
+    useFamilyStore.getState().setMotorAlarmActive(true);
     notifyMotorAction('expire');
-  }, []);
+  }, [profile?.display_name]);
 
   const { remainingSeconds, isExpired } = useMotorTimer(activeMotorSession, handleMotorExpire);
 
@@ -92,8 +95,11 @@ export default function DashboardScreen() {
       const remaining = Math.max(0, Math.floor((activeAlarm.endMs - Date.now()) / 1000));
       setAlarmRemaining(remaining);
       if (remaining === 0) {
-        playChime('success');
-        speakNotification(`Alarm finished for ${activeAlarm.title}`);
+        startContinuousAlarm(
+          `⏰ ALARM FINISHED: ${activeAlarm.title}`,
+          `Alarm "${activeAlarm.title}" timer completed!`,
+          `Attention! Alarm timer for ${activeAlarm.title} is finished!`
+        );
         setActiveAlarm(null);
       }
     };

@@ -2,19 +2,24 @@ import { useEffect, useState } from 'react';
 import { StyleSheet, View, Text, Modal, TouchableOpacity, Platform } from 'react-native';
 import { Tabs } from 'expo-router';
 import * as Speech from 'expo-speech';
-import * as Haptics from 'expo-haptics';
 import { colors, typography, radius, spacing } from '@/lib/theme';
 import { useAuthStore } from '@/lib/auth-store';
 import { useFamilyStore } from '@/lib/family-store';
-import { notifyRingReceived, notifySosAlert } from '@/lib/sound-notifications';
+import { stopMotorSession } from '@/lib/motor-utils';
+import { notifyRingReceived, notifySosAlert, requestNotificationPermissions, stopContinuousAlarm } from '@/lib/sound-notifications';
 import { Button } from '@/components/Button';
-import { Home, CheckSquare, MessageCircle, Users, BellRing, AlertTriangle } from 'lucide-react-native';
+import { Home, CheckSquare, MessageCircle, Users, BellRing, AlertTriangle, Droplets } from 'lucide-react-native';
 
 export default function TabLayout() {
   const { user, profile } = useAuthStore();
-  const { subscribe, incomingRing, clearIncomingRing, recentSos, members } = useFamilyStore();
+  const { subscribe, incomingRing, clearIncomingRing, recentSos, members, family, activeMotorSession, motorAlarmActive, silenceMotorAlarm } = useFamilyStore();
   const [activeRingModal, setActiveRingModal] = useState(false);
   const [ringSenderName, setRingSenderName] = useState<string>('A family member');
+
+  // Request system notification permissions on mount
+  useEffect(() => {
+    requestNotificationPermissions();
+  }, []);
 
   useEffect(() => {
     if (profile?.family_id) {
@@ -53,6 +58,13 @@ export default function TabLayout() {
       Speech.stop();
     } catch {
       // silent
+    }
+  };
+
+  const handleSilenceMotorAlarm = async () => {
+    silenceMotorAlarm();
+    if (activeMotorSession && family) {
+      await stopMotorSession(activeMotorSession.id, family.id, profile?.display_name);
     }
   };
 
@@ -131,6 +143,28 @@ export default function TabLayout() {
           </View>
         </View>
       </Modal>
+
+      {/* Global Motor Alarm Alert Modal */}
+      <Modal visible={motorAlarmActive} transparent animationType="slide" onRequestClose={handleSilenceMotorAlarm}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.alarmModalCard}>
+            <View style={styles.alarmIconWrap}>
+              <Droplets size={52} color={colors.neutral[0]} strokeWidth={2.5} />
+            </View>
+            <Text style={styles.alarmModalTitle}>⚠️ MOTOR ALARM EXPIRED!</Text>
+            <Text style={styles.alarmModalBody}>
+              Water tank motor timer completed. Turn off the machine now to prevent overflow!
+            </Text>
+            <Button
+              label="Turn Off Machine & Silence Alarm"
+              onPress={handleSilenceMotorAlarm}
+              variant="danger"
+              fullWidth
+              size="lg"
+            />
+          </View>
+        </View>
+      </Modal>
     </>
   );
 }
@@ -138,7 +172,7 @@ export default function TabLayout() {
 const styles = StyleSheet.create({
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.6)',
+    backgroundColor: 'rgba(0,0,0,0.7)',
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: spacing.xl,
@@ -181,5 +215,43 @@ const styles = StyleSheet.create({
   ringSenderBold: {
     fontFamily: typography.fontFamilyBold,
     color: colors.secondary[700],
+  },
+  alarmModalCard: {
+    backgroundColor: colors.neutral[0],
+    borderRadius: radius.xl,
+    padding: spacing.xl,
+    alignItems: 'center',
+    width: '100%',
+    borderColor: colors.error[500],
+    borderWidth: 2,
+    shadowColor: colors.error[600],
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
+    elevation: 12,
+  },
+  alarmIconWrap: {
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    backgroundColor: colors.error[600],
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.lg,
+  },
+  alarmModalTitle: {
+    fontSize: 22,
+    fontFamily: typography.fontFamilyBold,
+    color: colors.error[700],
+    marginBottom: spacing.xs,
+    textAlign: 'center',
+  },
+  alarmModalBody: {
+    fontSize: 16,
+    fontFamily: typography.fontFamilyRegular,
+    color: colors.neutral[700],
+    textAlign: 'center',
+    marginBottom: spacing.xl,
+    lineHeight: 24,
   },
 });

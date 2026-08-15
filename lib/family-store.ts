@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { supabase } from './supabase';
 import type { Family, Profile, MotorSession, SosAlert, RingAlert, TankType } from './types';
 import { generateFamilyCode } from './helpers';
-import { notifyMotorAction, notifyGateToggle } from './sound-notifications';
+import { notifyMotorAction, notifyGateToggle, stopContinuousAlarm } from './sound-notifications';
 
 interface FamilyState {
   family: Family | null;
@@ -12,6 +12,7 @@ interface FamilyState {
   recentSos: SosAlert | null;
   incomingRing: RingAlert | null;
   isGateLocked: boolean;
+  motorAlarmActive: boolean;
   loading: boolean;
   error: string | null;
 
@@ -21,10 +22,12 @@ interface FamilyState {
   unsubscribe: () => void;
   fetchMotorSession: (familyId: string) => Promise<void>;
   toggleGate: (senderName?: string) => boolean;
-  broadcastMotorAction: (action: 'start' | 'stop', session: MotorSession | null, tank?: TankType, senderName?: string) => void;
+  broadcastMotorAction: (action: 'start' | 'stop' | 'expire', session: MotorSession | null, tank?: TankType, senderName?: string) => void;
   sendRingAlert: (targetId: string | null, senderId: string, senderName: string) => Promise<void>;
   clearIncomingRing: () => void;
   clearSos: () => void;
+  setMotorAlarmActive: (active: boolean) => void;
+  silenceMotorAlarm: () => void;
 }
 
 let subscriptions: { unsubscribe: () => void }[] = [];
@@ -47,6 +50,7 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
   recentSos: null,
   incomingRing: null,
   isGateLocked: true,
+  motorAlarmActive: false,
   loading: false,
   error: null,
 
@@ -253,6 +257,12 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
       .on('broadcast', { event: 'motor_toggle' }, (payload) => {
         if (payload?.payload) {
           set({ activeMotorSession: payload.payload.session ?? null });
+          if (payload.payload.action === 'expire') {
+            set({ motorAlarmActive: true });
+          } else if (payload.payload.action === 'stop') {
+            stopContinuousAlarm();
+            set({ motorAlarmActive: false });
+          }
           notifyMotorAction(payload.payload.action, payload.payload.tank, payload.payload.sender_name);
         }
       })
@@ -352,4 +362,9 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
 
   clearIncomingRing: () => set({ incomingRing: null }),
   clearSos: () => set({ recentSos: null }),
+  setMotorAlarmActive: (active: boolean) => set({ motorAlarmActive: active }),
+  silenceMotorAlarm: () => {
+    stopContinuousAlarm();
+    set({ motorAlarmActive: false });
+  },
 }));
