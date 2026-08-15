@@ -66,14 +66,19 @@ export default function DashboardScreen() {
     }
   }, [family?.id]);
 
+import {
+  notifyGateToggle,
+  notifyMotorAction,
+  notifySosAlert,
+  playChime,
+  speakNotification,
+} from '@/lib/sound-notifications';
+
   // Handle motor timer expiry
   const handleMotorExpire = useCallback(async (session: typeof activeMotorSession) => {
     if (!session) return;
     await stopMotorSession(session.id, session.family_id);
-    speakVoice('Motor off');
-    if (Platform.OS !== 'web') {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-    }
+    notifyMotorAction('expire');
   }, []);
 
   const { remainingSeconds, isExpired } = useMotorTimer(activeMotorSession, handleMotorExpire);
@@ -88,10 +93,8 @@ export default function DashboardScreen() {
       const remaining = Math.max(0, Math.floor((activeAlarm.endMs - Date.now()) / 1000));
       setAlarmRemaining(remaining);
       if (remaining === 0) {
-        speakVoice(`Alarm finished for ${activeAlarm.title}`);
-        if (Platform.OS !== 'web') {
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        }
+        playChime('success');
+        speakNotification(`Alarm finished for ${activeAlarm.title}`);
         setActiveAlarm(null);
       }
     };
@@ -103,10 +106,7 @@ export default function DashboardScreen() {
   // Gate Lock/Unlock Handler
   const handleToggleGate = () => {
     const nextLocked = toggleGate(profile?.display_name);
-    if (Platform.OS !== 'web') {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    }
-    speakVoice(nextLocked ? 'Gate locked' : 'Gate unlocked');
+    notifyGateToggle(nextLocked);
   };
 
   // SOS hold logic
@@ -173,14 +173,14 @@ export default function DashboardScreen() {
       setMotorError(error);
     } else {
       setShowTimerModal(false);
-      speakVoice(selectedTank === 'top' ? 'Top tank motor on' : 'Down tank motor on');
+      notifyMotorAction('start', selectedTank, profile?.display_name);
     }
   };
 
   const handleStopMotor = async () => {
     if (!activeMotorSession) return;
     await stopMotorSession(activeMotorSession.id, family?.id);
-    speakVoice('Motor off');
+    notifyMotorAction('stop', undefined, profile?.display_name);
   };
 
   // Custom Alarm Handlers
@@ -191,12 +191,14 @@ export default function DashboardScreen() {
     setActiveAlarm({ title, endMs, totalSeconds: totalSecs });
     setShowCustomAlarmModal(false);
     setCustomAlarmTitle('');
-    speakVoice(`Alarm set for ${title}`);
+    playChime('info');
+    speakNotification(`Alarm set for ${title}`);
   };
 
   const handleStopCustomAlarm = () => {
     if (activeAlarm) {
-      speakVoice(`Alarm stopped for ${activeAlarm.title}`);
+      playChime('info');
+      speakNotification(`Alarm stopped for ${activeAlarm.title}`);
     }
     setActiveAlarm(null);
   };

@@ -21,6 +21,7 @@ import { Button } from '@/components/Button';
 import { ModalBase } from '@/components/ModalBase';
 import { EmptyState, LoadingState } from '@/components/States';
 import type { Task, Priority } from '@/lib/types';
+import { notifyTaskAction } from '@/lib/sound-notifications';
 import {
   CheckSquare,
   Square,
@@ -146,11 +147,10 @@ export default function TasksScreen() {
         completed_at: newCompleted ? new Date().toISOString() : null,
       })
       .eq('id', task.id);
+
     if (newCompleted) {
       setCelebrating(task.id);
-      if (Platform.OS !== 'web') {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      }
+      notifyTaskAction('completed', task.title, profile?.display_name);
       setTimeout(() => setCelebrating(null), 2000);
     }
   };
@@ -183,6 +183,7 @@ export default function TasksScreen() {
       setTaskError(error.message);
     } else {
       setShowAddModal(false);
+      notifyTaskAction('created', title.trim(), profile?.display_name);
       setTitle('');
       setPriority('medium');
       setAssigneeId(null);

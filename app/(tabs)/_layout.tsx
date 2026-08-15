@@ -6,6 +6,7 @@ import * as Haptics from 'expo-haptics';
 import { colors, typography, radius, spacing } from '@/lib/theme';
 import { useAuthStore } from '@/lib/auth-store';
 import { useFamilyStore } from '@/lib/family-store';
+import { notifyRingReceived, notifySosAlert } from '@/lib/sound-notifications';
 import { Button } from '@/components/Button';
 import { Home, CheckSquare, MessageCircle, Users, BellRing, AlertTriangle } from 'lucide-react-native';
 
@@ -31,16 +32,7 @@ export default function TabLayout() {
         setRingSenderName(senderName);
         setActiveRingModal(true);
 
-        try {
-          Speech.stop();
-          Speech.speak(`Attention! ${senderName} is ringing your phone!`, { language: 'en' });
-        } catch {
-          // silent
-        }
-
-        if (Platform.OS !== 'web') {
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-        }
+        notifyRingReceived(senderName);
       }
     }
   }, [incomingRing, user?.id, members]);
@@ -50,15 +42,7 @@ export default function TabLayout() {
     if (recentSos && recentSos.sent_by !== user?.id) {
       const sender = members.find((m) => m.id === recentSos.sent_by);
       const senderName = sender?.display_name ?? 'A family member';
-      try {
-        Speech.stop();
-        Speech.speak(`Emergency SOS alert! ${senderName} needs help!`, { language: 'en' });
-      } catch {
-        // silent
-      }
-      if (Platform.OS !== 'web') {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      }
+      notifySosAlert(senderName);
     }
   }, [recentSos, user?.id, members]);
 

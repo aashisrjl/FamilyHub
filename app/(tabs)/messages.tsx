@@ -22,6 +22,7 @@ import { Avatar } from '@/components/Avatar';
 import { EmptyState, LoadingState } from '@/components/States';
 import { useVoiceRecorder, useAudioPlayer } from '@/lib/audio-utils';
 import type { Message } from '@/lib/types';
+import { notifyNewMessage } from '@/lib/sound-notifications';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import {
@@ -116,15 +117,20 @@ export default function MessagesScreen() {
       .channel(`messages-${family.id}-${filter}-${recipientId ?? 'all'}`)
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'messages', filter: `family_id=eq.${family.id}` },
-        // Background refresh — no loading flash
-        () => loadMessagesRef.current(true)
+        { event: 'INSERT', schema: 'public', table: 'messages', filter: `family_id=eq.${family.id}` },
+        (payload) => {
+          if (payload.new && payload.new.sender_id !== user?.id) {
+            const sender = members.find((m) => m.id === payload.new.sender_id);
+            notifyNewMessage(sender?.display_name ?? 'Family Member', payload.new.text);
+          }
+          loadMessagesRef.current(true);
+        }
       )
       .subscribe();
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [family?.id, filter, recipientId]);
+  }, [family?.id, filter, recipientId, user?.id, members]);
 
   const getSenderName = (id: string) => {
     if (id === user?.id) return 'You';
