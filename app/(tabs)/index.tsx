@@ -7,6 +7,13 @@ import { useFamilyStore } from '@/lib/family-store';
 import { useMotorTimer, startMotorSession, stopMotorSession } from '@/lib/motor-utils';
 import { colors, typography, radius, spacing } from '@/lib/theme';
 import { formatTimer } from '@/lib/helpers';
+import {
+  notifyGateToggle,
+  notifyMotorAction,
+  notifySosAlert,
+  playChime,
+  speakNotification,
+} from '@/lib/sound-notifications';
 import { Avatar } from '@/components/Avatar';
 import { Button } from '@/components/Button';
 import { ModalBase } from '@/components/ModalBase';
@@ -65,14 +72,6 @@ export default function DashboardScreen() {
       subscribe(family.id);
     }
   }, [family?.id]);
-
-import {
-  notifyGateToggle,
-  notifyMotorAction,
-  notifySosAlert,
-  playChime,
-  speakNotification,
-} from '@/lib/sound-notifications';
 
   // Handle motor timer expiry
   const handleMotorExpire = useCallback(async (session: typeof activeMotorSession) => {
