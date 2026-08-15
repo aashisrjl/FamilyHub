@@ -31,6 +31,10 @@ import {
   Users,
   Lock,
   Unlock,
+  Zap,
+  Trash2,
+  Edit3,
+  Sliders,
 } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
 import * as Haptics from 'expo-haptics';
@@ -38,7 +42,20 @@ import * as Haptics from 'expo-haptics';
 export default function DashboardScreen() {
   const router = useRouter();
   const { user, profile } = useAuthStore();
-  const { family, members, activeMotorSession, recentSos, clearSos, subscribe, isGateLocked, toggleGate } = useFamilyStore();
+  const {
+    family,
+    members,
+    activeMotorSession,
+    recentSos,
+    clearSos,
+    subscribe,
+    isGateLocked,
+    toggleGate,
+    quickActions,
+    createQuickAction,
+    updateQuickAction,
+    deleteQuickAction,
+  } = useFamilyStore();
 
   const [showTimerModal, setShowTimerModal] = useState(false);
   const [selectedTank, setSelectedTank] = useState<'top' | 'down'>('top');
@@ -56,6 +73,83 @@ export default function DashboardScreen() {
   const [customAlarmMinutes, setCustomAlarmMinutes] = useState(15);
   const [activeAlarm, setActiveAlarm] = useState<{ title: string; endMs: number; totalSeconds: number } | null>(null);
   const [alarmRemaining, setAlarmRemaining] = useState(0);
+
+  // Quick Action Admin Modal State
+  const isAmAdmin = profile?.role === 'admin' || family?.created_by === user?.id;
+  const [showActionModal, setShowActionModal] = useState(false);
+  const [editingActionId, setEditingActionId] = useState<string | null>(null);
+  const [actionTitle, setActionTitle] = useState('');
+  const [actionType, setActionType] = useState<'motor' | 'alarm' | 'custom'>('motor');
+  const [actionTank, setActionTank] = useState<'top' | 'down'>('top');
+  const [actionDuration, setActionDuration] = useState(30);
+  const [actionColor, setActionColor] = useState('#0284C7');
+
+  const openCreateActionModal = () => {
+    setEditingActionId(null);
+    setActionTitle('');
+    setActionType('motor');
+    setActionTank('top');
+    setActionDuration(30);
+    setActionColor('#0284C7');
+    setShowActionModal(true);
+  };
+
+  const openEditActionModal = (action: typeof quickActions[0]) => {
+    setEditingActionId(action.id);
+    setActionTitle(action.title);
+    setActionType(action.action_type);
+    setActionTank(action.tank ?? 'top');
+    setActionDuration(action.default_duration_minutes);
+    setActionColor(action.color ?? '#0284C7');
+    setShowActionModal(true);
+  };
+
+  const handleSaveAction = async () => {
+    if (!actionTitle.trim()) return;
+    const payload = {
+      title: actionTitle.trim(),
+      action_type: actionType,
+      tank: actionType === 'motor' ? actionTank : null,
+      default_duration_minutes: actionDuration,
+      color: actionColor,
+      icon: actionType === 'motor' ? 'droplets' : actionType === 'alarm' ? 'bell' : 'zap',
+    };
+
+    if (editingActionId) {
+      await updateQuickAction(editingActionId, payload);
+    } else {
+      await createQuickAction(payload);
+    }
+
+    setShowActionModal(false);
+    if (Platform.OS !== 'web') {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    }
+  };
+
+  const handleDeleteAction = async (id: string) => {
+    await deleteQuickAction(id);
+    setShowActionModal(false);
+    if (Platform.OS !== 'web') {
+      Haptics.selectionAsync();
+    }
+  };
+
+  const triggerQuickAction = (q: typeof quickActions[0]) => {
+    if (q.action_type === 'motor') {
+      setSelectedTank(q.tank ?? 'top');
+      setDuration(q.default_duration_minutes);
+      setShowTimerModal(true);
+    } else if (q.action_type === 'alarm') {
+      setCustomAlarmTitle(q.title);
+      setCustomAlarmMinutes(q.default_duration_minutes);
+      setShowCustomAlarmModal(true);
+    } else {
+      setCustomAlarmTitle(q.title);
+      setCustomAlarmMinutes(q.default_duration_minutes);
+      setShowCustomAlarmModal(true);
+    }
+  };
 
   // Voice speech helper
   const speakVoice = (text: string) => {
@@ -344,51 +438,69 @@ export default function DashboardScreen() {
         </View>
       )}
 
-      {/* Quick Actions */}
-      <Text style={styles.sectionTitle}>Quick Actions</Text>
-      <View style={styles.actionsRow}>
-        <TouchableOpacity
-          style={[styles.actionCard, styles.topTankCard]}
-          onPress={() => openTimerModal('top')}
-          activeOpacity={0.8}
-          disabled={!!activeMotorSession}
-        >
-          <View style={styles.actionIconWrap}>
-            <Droplets size={28} color={colors.secondary[600]} strokeWidth={2} />
-          </View>
-          <Text style={styles.actionTitle}>Top Tank</Text>
-          <Text style={styles.actionSub}>Motor</Text>
-          <Text style={styles.actionDefault}>30 min</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.actionCard, styles.downTankCard]}
-          onPress={() => openTimerModal('down')}
-          activeOpacity={0.8}
-          disabled={!!activeMotorSession}
-        >
-          <View style={styles.actionIconWrap}>
-            <Droplet size={28} color={colors.accent[600]} strokeWidth={2} />
-          </View>
-          <Text style={styles.actionTitle}>Down Tank</Text>
-          <Text style={styles.actionSub}>Motor</Text>
-          <Text style={styles.actionDefault}>40 min</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.actionCard, styles.customAlarmCard]}
-          onPress={() => setShowCustomAlarmModal(true)}
-          activeOpacity={0.8}
-          disabled={!!activeAlarm}
-        >
-          <View style={styles.actionIconWrap}>
-            <Bell size={28} color={colors.primary[600]} strokeWidth={2} />
-          </View>
-          <Text style={styles.actionTitle}>Custom Alarm</Text>
-          <Text style={styles.actionSub}>Timer</Text>
-          <Text style={styles.actionDefault}>Specific</Text>
-        </TouchableOpacity>
+      {/* Quick Actions Header & Grid */}
+      <View style={styles.sectionHeaderRow}>
+        <Text style={styles.sectionTitle}>Quick Actions</Text>
+        {isAmAdmin && (
+          <TouchableOpacity
+            style={styles.addActionHeaderBtn}
+            onPress={openCreateActionModal}
+            activeOpacity={0.8}
+          >
+            <Plus size={16} color={colors.primary[600]} strokeWidth={2.5} />
+            <Text style={styles.addActionHeaderBtnText}>Add Action</Text>
+          </TouchableOpacity>
+        )}
       </View>
+
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.actionsRow}>
+        {quickActions.map((q) => {
+          const cardColor = q.color || '#0284C7';
+          return (
+            <TouchableOpacity
+              key={q.id}
+              style={[styles.dynamicActionCard, { borderColor: cardColor + '40' }]}
+              onPress={() => triggerQuickAction(q)}
+              activeOpacity={0.8}
+            >
+              {isAmAdmin && (
+                <TouchableOpacity
+                  style={styles.cardEditBadge}
+                  onPress={() => openEditActionModal(q)}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <Edit3 size={14} color={colors.neutral[600]} strokeWidth={2} />
+                </TouchableOpacity>
+              )}
+              <View style={[styles.actionIconWrap, { backgroundColor: cardColor + '15' }]}>
+                {q.action_type === 'motor' ? (
+                  <Droplets size={26} color={cardColor} strokeWidth={2} />
+                ) : q.action_type === 'alarm' ? (
+                  <Bell size={26} color={cardColor} strokeWidth={2} />
+                ) : (
+                  <Zap size={26} color={cardColor} strokeWidth={2} />
+                )}
+              </View>
+              <Text style={styles.actionTitle} numberOfLines={1}>
+                {q.title}
+              </Text>
+              <Text style={styles.actionSub}>
+                {q.action_type === 'motor'
+                  ? `${q.tank === 'top' ? 'Top' : 'Down'} Motor`
+                  : q.action_type === 'alarm'
+                  ? 'Alarm'
+                  : 'Quick Task'}
+              </Text>
+              <View style={[styles.actionDefaultBadge, { backgroundColor: cardColor + '20' }]}>
+                <Clock size={10} color={cardColor} strokeWidth={2} />
+                <Text style={[styles.actionDefaultText, { color: cardColor }]}>
+                  {q.default_duration_minutes} min
+                </Text>
+              </View>
+            </TouchableOpacity>
+          );
+        })}
+      </ScrollView>
 
       {/* SOS Button */}
       <View style={styles.sosContainer}>
@@ -547,6 +659,116 @@ export default function DashboardScreen() {
             size="lg"
             icon={<Bell size={20} color={colors.neutral[0]} strokeWidth={2} />}
           />
+        </View>
+      </ModalBase>
+
+      {/* Admin Quick Action Config Modal */}
+      <ModalBase
+        visible={showActionModal}
+        onClose={() => setShowActionModal(false)}
+        title={editingActionId ? 'Edit Quick Action' : 'Create Quick Action'}
+      >
+        <View style={styles.timerModalContent}>
+          <Text style={styles.inputLabel}>Action Title</Text>
+          <View style={styles.inputWrap}>
+            <TextInput
+              style={styles.input}
+              placeholder="e.g. Top Tank 30m, Lawn Hose 15m"
+              placeholderTextColor={colors.neutral[400]}
+              value={actionTitle}
+              onChangeText={setActionTitle}
+            />
+          </View>
+
+          <Text style={styles.inputLabel}>Action Type</Text>
+          <View style={styles.typeRow}>
+            {(['motor', 'alarm', 'custom'] as const).map((t) => (
+              <TouchableOpacity
+                key={t}
+                style={[styles.typeChip, actionType === t && styles.typeChipActive]}
+                onPress={() => setActionType(t)}
+              >
+                <Text style={[styles.typeChipText, actionType === t && styles.typeChipTextActive]}>
+                  {t === 'motor' ? '💧 Motor' : t === 'alarm' ? '🔔 Alarm' : '⚡ Custom'}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          {actionType === 'motor' && (
+            <>
+              <Text style={styles.inputLabel}>Tank Selection</Text>
+              <View style={styles.typeRow}>
+                <TouchableOpacity
+                  style={[styles.typeChip, actionTank === 'top' && styles.typeChipActive]}
+                  onPress={() => setActionTank('top')}
+                >
+                  <Text style={[styles.typeChipText, actionTank === 'top' && styles.typeChipTextActive]}>
+                    Top Tank
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.typeChip, actionTank === 'down' && styles.typeChipActive]}
+                  onPress={() => setActionTank('down')}
+                >
+                  <Text style={[styles.typeChipText, actionTank === 'down' && styles.typeChipTextActive]}>
+                    Down Tank
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </>
+          )}
+
+          <Text style={styles.inputLabel}>Default Duration (minutes)</Text>
+          <View style={styles.durationDisplay}>
+            <Text style={styles.durationValue}>{actionDuration}</Text>
+            <Text style={styles.durationUnit}>minutes</Text>
+          </View>
+          <View style={styles.durationControls}>
+            <TouchableOpacity
+              style={styles.durationBtn}
+              onPress={() => setActionDuration((d) => Math.max(1, d - 5))}
+            >
+              <Minus size={24} color={colors.neutral[700]} strokeWidth={2} />
+            </TouchableOpacity>
+            <View style={styles.durationPresets}>
+              {[10, 15, 30, 45, 60].map((preset) => (
+                <TouchableOpacity
+                  key={preset}
+                  style={[styles.presetBtn, actionDuration === preset && styles.presetBtnActive]}
+                  onPress={() => setActionDuration(preset)}
+                >
+                  <Text style={[styles.presetText, actionDuration === preset && styles.presetTextActive]}>
+                    {preset}m
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            <TouchableOpacity
+              style={styles.durationBtn}
+              onPress={() => setActionDuration((d) => Math.min(180, d + 5))}
+            >
+              <Plus size={24} color={colors.neutral[700]} strokeWidth={2} />
+            </TouchableOpacity>
+          </View>
+
+          <Button
+            label={editingActionId ? 'Save Changes' : 'Create Quick Action'}
+            onPress={handleSaveAction}
+            fullWidth
+            size="lg"
+            icon={<Sliders size={20} color={colors.neutral[0]} strokeWidth={2} />}
+          />
+
+          {editingActionId && (
+            <TouchableOpacity
+              style={styles.deleteActionBtn}
+              onPress={() => handleDeleteAction(editingActionId)}
+            >
+              <Trash2 size={18} color={colors.error[500]} strokeWidth={2} />
+              <Text style={styles.deleteActionText}>Delete Action</Text>
+            </TouchableOpacity>
+          )}
         </View>
       </ModalBase>
 
@@ -773,59 +995,129 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontFamily: typography.fontFamilyBold,
     color: colors.neutral[800],
-    marginTop: spacing.sm,
+  },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: spacing.md,
     marginBottom: spacing.sm,
+  },
+  addActionHeaderBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: colors.primary[50],
+    paddingHorizontal: spacing.sm + 2,
+    paddingVertical: 4,
+    borderRadius: radius.full,
+    borderWidth: 1,
+    borderColor: colors.primary[200],
+  },
+  addActionHeaderBtnText: {
+    fontSize: 12,
+    fontFamily: typography.fontFamilyBold,
+    color: colors.primary[700],
   },
   actionsRow: {
     flexDirection: 'row',
-    gap: spacing.sm,
+    paddingBottom: spacing.sm,
   },
-  actionCard: {
-    flex: 1,
+  dynamicActionCard: {
+    width: 125,
+    backgroundColor: colors.neutral[0],
     borderRadius: radius.lg,
     padding: spacing.md,
     alignItems: 'center',
+    borderWidth: 1.5,
+    marginRight: spacing.sm,
     shadowColor: colors.neutral[900],
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
-    shadowRadius: 8,
+    shadowRadius: 6,
     elevation: 2,
+    position: 'relative',
   },
-  topTankCard: {
-    backgroundColor: colors.secondary[50],
-    borderWidth: 1.5,
-    borderColor: colors.secondary[100],
-  },
-  downTankCard: {
-    backgroundColor: colors.accent[50],
-    borderWidth: 1.5,
-    borderColor: colors.accent[100],
-  },
-  customAlarmCard: {
-    backgroundColor: colors.primary[50],
-    borderWidth: 1.5,
-    borderColor: colors.primary[100],
+  cardEditBadge: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    backgroundColor: colors.neutral[100],
+    padding: 4,
+    borderRadius: radius.full,
   },
   actionIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: radius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
     marginBottom: spacing.xs,
   },
   actionTitle: {
-    fontSize: 15,
+    fontSize: 14,
     fontFamily: typography.fontFamilyBold,
     color: colors.neutral[900],
     textAlign: 'center',
   },
   actionSub: {
-    fontSize: 12,
+    fontSize: 11,
     fontFamily: typography.fontFamilyRegular,
     color: colors.neutral[500],
     marginTop: 2,
   },
-  actionDefault: {
-    fontSize: 11,
-    fontFamily: typography.fontFamilyMedium,
-    color: colors.neutral[400],
-    marginTop: spacing.xs,
+  actionDefaultBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: radius.full,
+    marginTop: spacing.xs + 2,
+  },
+  actionDefaultText: {
+    fontSize: 10,
+    fontFamily: typography.fontFamilyBold,
+  },
+  typeRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginBottom: spacing.md,
+  },
+  typeChip: {
+    flex: 1,
+    paddingVertical: spacing.sm + 2,
+    paddingHorizontal: spacing.sm,
+    borderRadius: radius.md,
+    backgroundColor: colors.neutral[100],
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.neutral[200],
+  },
+  typeChipActive: {
+    backgroundColor: colors.primary[50],
+    borderColor: colors.primary[500],
+  },
+  typeChipText: {
+    fontSize: 13,
+    fontFamily: typography.fontFamilyBold,
+    color: colors.neutral[600],
+  },
+  typeChipTextActive: {
+    color: colors.primary[700],
+  },
+  deleteActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+    paddingVertical: spacing.md,
+    marginTop: spacing.sm,
+  },
+  deleteActionText: {
+    fontSize: 14,
+    fontFamily: typography.fontFamilyBold,
+    color: colors.error[500],
   },
   sosContainer: {
     alignItems: 'center',

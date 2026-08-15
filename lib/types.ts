@@ -6,6 +6,21 @@ export type Priority = 'high' | 'medium' | 'low';
 
 export type MediaType = 'image' | 'audio' | 'file';
 
+export type QuickActionType = 'motor' | 'alarm' | 'custom';
+
+export interface QuickAction {
+  id: string;
+  family_id: string;
+  title: string;
+  action_type: QuickActionType;
+  tank?: TankType | null;
+  default_duration_minutes: number;
+  icon?: string | null;
+  color?: string | null;
+  created_by?: string | null;
+  created_at?: string;
+}
+
 export interface Family {
   id: string;
   name: string;

@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { supabase } from './supabase';
-import type { Family, Profile, MotorSession, SosAlert, RingAlert, TankType } from './types';
+import type { Family, Profile, MotorSession, SosAlert, RingAlert, TankType, QuickAction } from './types';
 import { generateFamilyCode } from './helpers';
 import { notifyMotorAction, notifyGateToggle, stopContinuousAlarm, notifyProximityAlert, notifyHomeArrival, notifyHomeDeparture } from './sound-notifications';
 import { getCurrentUserLocation, updateUserLocationInDB, calculateDistance, formatDistance } from './location-utils';
@@ -12,6 +12,7 @@ interface FamilyState {
   activeMotorSession: MotorSession | null;
   recentSos: SosAlert | null;
   incomingRing: RingAlert | null;
+  quickActions: QuickAction[];
   isGateLocked: boolean;
   motorAlarmActive: boolean;
   myLocation: { latitude: number; longitude: number } | null;
@@ -23,6 +24,10 @@ interface FamilyState {
   subscribe: (familyId: string) => void;
   unsubscribe: () => void;
   fetchMotorSession: (familyId: string) => Promise<void>;
+  fetchQuickActions: (familyId: string) => Promise<void>;
+  createQuickAction: (actionData: Partial<QuickAction>) => Promise<boolean>;
+  updateQuickAction: (id: string, actionData: Partial<QuickAction>) => Promise<boolean>;
+  deleteQuickAction: (id: string) => Promise<boolean>;
   toggleGate: (senderName?: string) => boolean;
   broadcastMotorAction: (action: 'start' | 'stop' | 'expire', session: MotorSession | null, tank?: TankType, senderName?: string) => void;
   sendRingAlert: (targetId: string | null, senderId: string, senderName: string) => Promise<void>;
@@ -58,6 +63,7 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
   activeMotorSession: null,
   recentSos: null,
   incomingRing: null,
+  quickActions: [],
   isGateLocked: true,
   motorAlarmActive: false,
   myLocation: null,
@@ -352,8 +358,22 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
       })
       .subscribe();
 
+    // Subscribe to quick actions
+    const quickActionsSub = supabase
+      .channel(`quick-actions-${familyId}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'quick_actions', filter: `family_id=eq.${familyId}` },
+        () => {
+          get().fetchQuickActions(familyId);
+        }
+      )
+      .subscribe();
+
+    get().fetchQuickActions(familyId);
+
     activeHubChannel = hubSub;
-    subscriptions = [familyDbSub, membersSub, motorSub, sosSub, ringSub, hubSub];
+    subscriptions = [familyDbSub, membersSub, motorSub, sosSub, ringSub, hubSub, quickActionsSub];
   },
 
   /** Full reset — only call on sign-out */
@@ -515,6 +535,96 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
     if (!error) {
       set((state) => ({
         members: state.members.filter((m) => m.id !== targetUserId),
+      }));
+      return true;
+    }
+    return false;
+  },
+
+  fetchQuickActions: async (familyId: string) => {
+    const { data, error } = await supabase
+      .from('quick_actions')
+      .select('*')
+      .eq('family_id', familyId)
+      .order('created_at', { ascending: true });
+
+    if (!error && data) {
+      if (data.length === 0) {
+        // Seed default quick actions if none exist
+        const defaultActions = [
+          {
+            family_id: familyId,
+            title: 'Top Tank Motor',
+            action_type: 'motor',
+            tank: 'top',
+            default_duration_minutes: 30,
+            icon: 'droplets',
+            color: '#0284C7',
+          },
+          {
+            family_id: familyId,
+            title: 'Down Tank Motor',
+            action_type: 'motor',
+            tank: 'down',
+            default_duration_minutes: 30,
+            icon: 'droplets',
+            color: '#059669',
+          },
+          {
+            family_id: familyId,
+            title: 'Custom Alarm Timer',
+            action_type: 'alarm',
+            default_duration_minutes: 15,
+            icon: 'bell',
+            color: '#7C3AED',
+          },
+        ];
+        const { data: seeded } = await supabase.from('quick_actions').insert(defaultActions).select();
+        if (seeded) {
+          set({ quickActions: seeded as QuickAction[] });
+          return;
+        }
+      }
+      set({ quickActions: data as QuickAction[] });
+    }
+  },
+
+  createQuickAction: async (actionData) => {
+    const { family } = get();
+    if (!family) return false;
+    const { data, error } = await supabase
+      .from('quick_actions')
+      .insert({ ...actionData, family_id: family.id })
+      .select()
+      .single();
+    if (!error && data) {
+      set((state) => ({ quickActions: [...state.quickActions, data as QuickAction] }));
+      return true;
+    }
+    return false;
+  },
+
+  updateQuickAction: async (id, actionData) => {
+    const { error, data } = await supabase
+      .from('quick_actions')
+      .update(actionData)
+      .eq('id', id)
+      .select()
+      .single();
+    if (!error && data) {
+      set((state) => ({
+        quickActions: state.quickActions.map((q) => (q.id === id ? (data as QuickAction) : q)),
+      }));
+      return true;
+    }
+    return false;
+  },
+
+  deleteQuickAction: async (id) => {
+    const { error } = await supabase.from('quick_actions').delete().eq('id', id);
+    if (!error) {
+      set((state) => ({
+        quickActions: state.quickActions.filter((q) => q.id !== id),
       }));
       return true;
     }
