@@ -20,6 +20,7 @@ import {
   Bell,
   Heart,
   Crown,
+  Phone,
 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { getCurrentUserLocation } from '@/lib/location-utils';
@@ -43,6 +44,8 @@ export default function ProfileScreen() {
 
   const [showEditName, setShowEditName] = useState(false);
   const [displayName, setDisplayName] = useState(profile?.display_name ?? '');
+  const [showEditPhone, setShowEditPhone] = useState(false);
+  const [phoneNumber, setPhoneNumber] = useState(profile?.phone_number ?? '');
   const [showStatusModal, setShowStatusModal] = useState(false);
   const [locating, setLocating] = useState(false);
   const [locStatus, setLocStatus] = useState<string | null>(null);
@@ -61,6 +64,14 @@ export default function ProfileScreen() {
     if (!displayName.trim()) return;
     await updateProfile({ display_name: displayName.trim() });
     setShowEditName(false);
+    if (Platform.OS !== 'web') {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    }
+  };
+
+  const handleSavePhone = async () => {
+    await updateProfile({ phone_number: phoneNumber.trim() });
+    setShowEditPhone(false);
     if (Platform.OS !== 'web') {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     }
@@ -178,6 +189,27 @@ export default function ProfileScreen() {
 
           <View style={styles.settingItem}>
             <View style={styles.settingLeft}>
+              <Phone size={20} color={colors.primary[600]} strokeWidth={2} />
+              <Text style={styles.settingLabel}>Mobile Number</Text>
+            </View>
+            <TouchableOpacity
+              style={styles.editPhoneValBtn}
+              onPress={() => {
+                setPhoneNumber(profile?.phone_number ?? '');
+                setShowEditPhone(true);
+              }}
+            >
+              <Text style={profile?.phone_number ? styles.settingValue : styles.settingValuePlaceholder}>
+                {profile?.phone_number || 'Add Mobile No.'}
+              </Text>
+              <Pencil size={14} color={colors.primary[600]} strokeWidth={2} />
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.settingsDivider} />
+
+          <View style={styles.settingItem}>
+            <View style={styles.settingLeft}>
               <Shield size={20} color={colors.secondary[600]} strokeWidth={2} />
               <Text style={styles.settingLabel}>Account Security</Text>
             </View>
@@ -256,6 +288,27 @@ export default function ProfileScreen() {
           <Button
             label="Save Name"
             onPress={handleSaveName}
+            fullWidth
+            size="lg"
+            icon={<Check size={20} color={colors.neutral[0]} strokeWidth={2} />}
+          />
+        </View>
+      </ModalBase>
+
+      {/* Edit Mobile Number Modal */}
+      <ModalBase visible={showEditPhone} onClose={() => setShowEditPhone(false)} title="Edit Mobile Number">
+        <View>
+          <TextInput
+            style={styles.nameInput}
+            placeholder="e.g. +977 9800000000"
+            placeholderTextColor={colors.neutral[400]}
+            keyboardType="phone-pad"
+            value={phoneNumber}
+            onChangeText={setPhoneNumber}
+          />
+          <Button
+            label="Save Mobile Number"
+            onPress={handleSavePhone}
             fullWidth
             size="lg"
             icon={<Check size={20} color={colors.neutral[0]} strokeWidth={2} />}
@@ -380,6 +433,16 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: typography.fontFamilyBold,
     color: colors.neutral[600],
+  },
+  settingValuePlaceholder: {
+    fontSize: 14,
+    fontFamily: typography.fontFamilyMedium,
+    color: colors.primary[600],
+  },
+  editPhoneValBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
   },
   settingsDivider: {
     height: 1,

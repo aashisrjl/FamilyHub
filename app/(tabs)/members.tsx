@@ -10,6 +10,7 @@ import {
   Platform,
   TextInput,
   Alert,
+  Linking,
 } from 'react-native';
 import { Stack } from 'expo-router';
 import { useAuthStore } from '@/lib/auth-store';
@@ -42,6 +43,8 @@ import {
   UserCheck,
   UserX,
   MoreVertical,
+  Mail,
+  MessageSquare,
 } from 'lucide-react-native';
 import * as Clipboard from 'expo-clipboard';
 import * as Haptics from 'expo-haptics';
@@ -140,6 +143,7 @@ export default function MembersScreen() {
   };
 
   const [selectedMember, setSelectedMember] = useState<typeof members[0] | null>(null);
+  const [detailMember, setDetailMember] = useState<typeof members[0] | null>(null);
   const [showAdminModal, setShowAdminModal] = useState(false);
 
   const isAmAdmin = profile?.role === 'admin' || family?.created_by === user?.id;
@@ -223,7 +227,11 @@ export default function MembersScreen() {
     }
 
     return (
-      <View style={styles.memberCard}>
+      <TouchableOpacity
+        style={styles.memberCard}
+        onPress={() => setDetailMember(item)}
+        activeOpacity={0.85}
+      >
         <Avatar name={item.display_name} size={52} status={item.status} colorIndex={idx} />
         <View style={styles.memberInfo}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
@@ -286,7 +294,7 @@ export default function MembersScreen() {
             </TouchableOpacity>
           )}
         </View>
-      </View>
+      </TouchableOpacity>
     );
   };
 
@@ -453,6 +461,110 @@ export default function MembersScreen() {
             </TouchableOpacity>
           </View>
         )}
+      </ModalBase>
+
+      {/* Member Detail Profile Dialogue Modal */}
+      <ModalBase
+        visible={!!detailMember}
+        onClose={() => setDetailMember(null)}
+        title="Member Profile"
+      >
+        {detailMember && (() => {
+          const idx = colorIndexFor(detailMember.id);
+          const sc = statusColors[detailMember.status];
+          const isMemberAdmin = detailMember.role === 'admin' || family?.created_by === detailMember.id;
+          const isMe = detailMember.id === user?.id;
+
+          return (
+            <View style={styles.detailModalContent}>
+              <View style={styles.detailHeader}>
+                <Avatar name={detailMember.display_name} size={64} status={detailMember.status} colorIndex={idx} />
+                <View style={styles.detailHeaderInfo}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                    <Text style={styles.detailName}>{detailMember.display_name}</Text>
+                    {isMemberAdmin && (
+                      <View style={styles.adminBadge}>
+                        <Crown size={12} color="#D97706" strokeWidth={2.5} />
+                        <Text style={styles.adminBadgeText}>Admin</Text>
+                      </View>
+                    )}
+                  </View>
+                  <View style={[styles.statusBadge, { backgroundColor: sc.bg, marginTop: 4 }]}>
+                    <View style={[styles.statusDot, { backgroundColor: sc.dot }]} />
+                    <Text style={[styles.statusText, { color: sc.text }]}>{statusLabels[detailMember.status]}</Text>
+                  </View>
+                </View>
+              </View>
+
+              <View style={styles.detailDivider} />
+
+              <View style={styles.detailRow}>
+                <Mail size={18} color={colors.primary[600]} strokeWidth={2} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.detailLabel}>Email Address</Text>
+                  <Text style={styles.detailValue}>{detailMember.email || 'Not specified'}</Text>
+                </View>
+              </View>
+
+              <View style={styles.detailRow}>
+                <Phone size={18} color={colors.secondary[600]} strokeWidth={2} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.detailLabel}>Mobile Number</Text>
+                  <Text style={styles.detailValue}>{detailMember.phone_number || 'Not added yet'}</Text>
+                </View>
+              </View>
+
+              <View style={styles.detailActionsRow}>
+                {detailMember.phone_number ? (
+                  <>
+                    <TouchableOpacity
+                      style={[styles.detailActionBtn, styles.callBtn]}
+                      onPress={() => Linking.openURL(`tel:${detailMember.phone_number}`)}
+                    >
+                      <Phone size={16} color={colors.neutral[0]} strokeWidth={2} />
+                      <Text style={styles.detailActionBtnText}>Call</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={[styles.detailActionBtn, styles.smsBtn]}
+                      onPress={() => Linking.openURL(`sms:${detailMember.phone_number}`)}
+                    >
+                      <MessageSquare size={16} color={colors.primary[700]} strokeWidth={2} />
+                      <Text style={styles.smsBtnText}>SMS</Text>
+                    </TouchableOpacity>
+                  </>
+                ) : null}
+
+                {!isMe && (
+                  <TouchableOpacity
+                    style={[styles.detailActionBtn, styles.ringActionBtn]}
+                    onPress={() => {
+                      handleRing(detailMember.id);
+                      setDetailMember(null);
+                    }}
+                  >
+                    <Bell size={16} color={colors.secondary[700]} strokeWidth={2} />
+                    <Text style={styles.ringActionBtnText}>Ring</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+
+              {isAmAdmin && !isMe && (
+                <TouchableOpacity
+                  style={styles.manageMemberTrigger}
+                  onPress={() => {
+                    setSelectedMember(detailMember);
+                    setDetailMember(null);
+                    setShowAdminModal(true);
+                  }}
+                >
+                  <UserCheck size={16} color={colors.neutral[600]} strokeWidth={2} />
+                  <Text style={styles.manageMemberTriggerText}>Manage {detailMember.display_name}</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          );
+        })()}
       </ModalBase>
     </View>
   );
@@ -891,5 +1003,109 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontFamily: typography.fontFamilyBold,
     color: colors.error[600],
+  },
+  // Detail Profile Dialogue Modal Styles
+  detailModalContent: {
+    paddingBottom: spacing.md,
+  },
+  detailHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.lg,
+    marginBottom: spacing.md,
+  },
+  detailHeaderInfo: {
+    flex: 1,
+  },
+  detailName: {
+    fontSize: 20,
+    fontFamily: typography.fontFamilyBold,
+    color: colors.neutral[900],
+  },
+  detailDivider: {
+    height: 1,
+    backgroundColor: colors.neutral[200],
+    marginVertical: spacing.md,
+  },
+  detailRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    backgroundColor: colors.neutral[50],
+    padding: spacing.md,
+    borderRadius: radius.lg,
+    marginBottom: spacing.sm,
+    borderWidth: 1,
+    borderColor: colors.neutral[200],
+  },
+  detailLabel: {
+    fontSize: 12,
+    fontFamily: typography.fontFamilyMedium,
+    color: colors.neutral[500],
+  },
+  detailValue: {
+    fontSize: 15,
+    fontFamily: typography.fontFamilyBold,
+    color: colors.neutral[800],
+    marginTop: 2,
+  },
+  detailActionsRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginTop: spacing.md,
+  },
+  detailActionBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: spacing.md,
+    borderRadius: radius.lg,
+  },
+  callBtn: {
+    backgroundColor: colors.success[600],
+  },
+  detailActionBtnText: {
+    fontSize: 14,
+    fontFamily: typography.fontFamilyBold,
+    color: colors.neutral[0],
+  },
+  smsBtn: {
+    backgroundColor: colors.primary[100],
+    borderWidth: 1,
+    borderColor: colors.primary[300],
+  },
+  smsBtnText: {
+    fontSize: 14,
+    fontFamily: typography.fontFamilyBold,
+    color: colors.primary[700],
+  },
+  ringActionBtn: {
+    backgroundColor: colors.secondary[100],
+    borderWidth: 1,
+    borderColor: colors.secondary[300],
+  },
+  ringActionBtnText: {
+    fontSize: 14,
+    fontFamily: typography.fontFamilyBold,
+    color: colors.secondary[700],
+  },
+  manageMemberTrigger: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: spacing.md,
+    marginTop: spacing.md,
+    backgroundColor: colors.neutral[100],
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.neutral[200],
+  },
+  manageMemberTriggerText: {
+    fontSize: 13,
+    fontFamily: typography.fontFamilyBold,
+    color: colors.neutral[700],
   },
 });

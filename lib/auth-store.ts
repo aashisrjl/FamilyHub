@@ -83,12 +83,19 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       const avatarUrl = meta?.avatar_url ?? meta?.picture ?? null;
       const { data: newProfile } = await supabase
         .from('profiles')
-        .insert({ id: user.id, display_name: displayName, avatar_url: avatarUrl })
+        .insert({ id: user.id, display_name: displayName, avatar_url: avatarUrl, email: user.email })
         .select()
         .single();
       set({ profile: newProfile as Profile | null });
       return;
     }
+
+    // Auto-update email on profile if it was missing
+    if (!data.email && user.email) {
+      await supabase.from('profiles').update({ email: user.email }).eq('id', user.id);
+      data.email = user.email;
+    }
+
     set({ profile: data as Profile });
   },
 
@@ -117,7 +124,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     if (data.user) {
       await supabase
         .from('profiles')
-        .insert({ id: data.user.id, display_name: displayName });
+        .insert({ id: data.user.id, display_name: displayName, email: data.user.email });
     }
     return { error: null };
   },
