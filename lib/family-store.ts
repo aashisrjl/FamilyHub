@@ -4,6 +4,8 @@ import type { Family, Profile, MotorSession, SosAlert, RingAlert, TankType, Quic
 import { generateFamilyCode } from './helpers';
 import { notifyMotorAction, notifyGateToggle, stopContinuousAlarm, notifyProximityAlert, notifyHomeArrival, notifyHomeDeparture } from './sound-notifications';
 import { getCurrentUserLocation, updateUserLocationInDB, calculateDistance, formatDistance } from './location-utils';
+import { sendExpoPushNotification } from './push-notifications';
+import { sendEmergencyEmailToFamily } from './email-service';
 
 interface FamilyState {
   family: Family | null;
@@ -449,6 +451,24 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
           sender_name: senderName,
         },
       });
+    }
+
+    // Send Expo Push Notification to target member(s)
+    const targetMembers = targetId
+      ? get().members.filter((m) => m.id === targetId)
+      : get().members.filter((m) => m.id !== senderId);
+
+    const pushTokens = targetMembers
+      .map((m) => m.push_token)
+      .filter((t): t is string => !!t && t.startsWith('ExponentPushToken'));
+
+    if (pushTokens.length > 0) {
+      sendExpoPushNotification(
+        pushTokens,
+        `🔔 ${senderName} is ringing you!`,
+        `Tap to open FamilyHub and respond.`,
+        { type: 'ring', senderId }
+      );
     }
   },
 

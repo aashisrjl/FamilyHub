@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { supabase } from './supabase';
 import type { Session, User } from '@supabase/supabase-js';
 import type { Profile } from './types';
+import { registerForPushNotificationsAsync } from './push-notifications';
 
 interface AuthState {
   session: Session | null;
@@ -97,6 +98,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
 
     set({ profile: data as Profile });
+    registerForPushNotificationsAsync(user.id);
   },
 
   signInWithEmail: async (email, password) => {

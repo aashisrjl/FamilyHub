@@ -15,6 +15,8 @@ import {
   speakNotification,
   startContinuousAlarm,
 } from '@/lib/sound-notifications';
+import { sendExpoPushNotification } from '@/lib/push-notifications';
+import { sendEmergencyEmailToFamily } from '@/lib/email-service';
 import { Avatar } from '@/components/Avatar';
 import { Button } from '@/components/Button';
 import { ModalBase } from '@/components/ModalBase';
@@ -252,6 +254,32 @@ export default function DashboardScreen() {
         family_id: family.id,
         sent_by: user.id,
       });
+
+      const senderName = profile?.display_name ?? 'Family Member';
+      const otherMembers = members.filter((m) => m.id !== user.id);
+
+      // 1. Dispatch Expo Push Notifications
+      const pushTokens = otherMembers
+        .map((m) => m.push_token)
+        .filter((t): t is string => !!t && t.startsWith('ExponentPushToken'));
+
+      if (pushTokens.length > 0) {
+        sendExpoPushNotification(
+          pushTokens,
+          `🚨 Emergency SOS Alert from ${senderName}`,
+          `${senderName} triggered an emergency SOS alert on FamilyHub!`,
+          { type: 'sos', senderId: user.id }
+        );
+      }
+
+      // 2. Dispatch Resend Email Notifications
+      sendEmergencyEmailToFamily(
+        family.id,
+        user.id,
+        senderName,
+        'Emergency SOS Alert',
+        `${senderName} pressed Emergency SOS alert on FamilyHub!`
+      );
     }
   };
 

@@ -1,0 +1,2 @@
+[functions.send-alert]
+verify_jwt = false

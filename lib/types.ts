@@ -41,8 +41,9 @@ export interface Profile {
   avatar_url: string | null;
   status: MemberStatus;
   role?: 'admin' | 'member';
-  phone_number?: string | null;
   email?: string | null;
+  phone_number?: string | null;
+  push_token?: string | null;
   fcm_token: string | null;
   latitude?: number | null;
   longitude?: number | null;

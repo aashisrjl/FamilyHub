@@ -70,8 +70,6 @@ export default function MembersScreen() {
   } = useFamilyStore();
   const [ringing, setRinging] = useState(false);
   const [codeCopied, setCodeCopied] = useState(false);
-  const [locating, setLocating] = useState(false);
-  const [locationStatus, setLocationStatus] = useState<string | null>(null);
 
   useEffect(() => {
     if (family) subscribe(family.id);
@@ -113,35 +111,7 @@ export default function MembersScreen() {
     }
   };
 
-  const handleUpdateLocation = async () => {
-    if (!user) return;
-    setLocating(true);
-    setLocationStatus('Fetching GPS location...');
-    const loc = await updateMyLocation(user.id, profile?.display_name);
-    setLocating(false);
 
-    if (loc) {
-      const nearby = members.filter((m) => {
-        if (m.id === user.id) return false;
-        if (typeof m.latitude === 'number' && typeof m.longitude === 'number') {
-          const dist = calculateDistance(loc.latitude, loc.longitude, m.latitude, m.longitude);
-          return dist <= 500;
-        }
-        return false;
-      });
-
-      if (nearby.length > 0) {
-        setLocationStatus(`📍 Location updated! ${nearby.length} family member(s) nearby.`);
-        for (const n of nearby) {
-          sendRingAlert(n.id, user.id, profile?.display_name ?? 'Family Member');
-        }
-      } else {
-        setLocationStatus('📍 Location updated and shared with family!');
-      }
-    } else {
-      setLocationStatus('⚠️ Could not access GPS location. Check permissions.');
-    }
-  };
 
   const [selectedMember, setSelectedMember] = useState<typeof members[0] | null>(null);
   const [detailMember, setDetailMember] = useState<typeof members[0] | null>(null);
@@ -335,28 +305,7 @@ export default function MembersScreen() {
               </View>
             )}
 
-            {/* Location & Home Sync Card */}
-            <View style={styles.locationCard}>
-              <View style={styles.locationHeader}>
-                <Navigation size={20} color={colors.primary[600]} strokeWidth={2} />
-                <Text style={styles.locationTitle}>Location & Home Sync</Text>
-              </View>
-              <Text style={styles.locationSubtitle}>
-                Sync your location to automatically check distance from Family Home and alert nearby members.
-              </Text>
-              <TouchableOpacity
-                style={styles.locationBtn}
-                onPress={handleUpdateLocation}
-                disabled={locating}
-                activeOpacity={0.8}
-              >
-                <MapPin size={18} color={colors.neutral[0]} strokeWidth={2} />
-                <Text style={styles.locationBtnText}>
-                  {locating ? 'Syncing GPS Location...' : 'Sync My Location'}
-                </Text>
-              </TouchableOpacity>
-              {locationStatus && <Text style={styles.locationStatusText}>{locationStatus}</Text>}
-            </View>
+
 
             {/* Ring All Button */}
             {otherMembers.length > 0 && (
