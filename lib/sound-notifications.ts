@@ -314,6 +314,14 @@ export function notifyNewMessage(senderName: string, textSnippet?: string) {
   showSystemNotification(`Message from ${senderName}`, textSnippet || 'Tap to view message');
 }
 
+/** Location Proximity Notification */
+export function notifyProximityAlert(memberName: string, distanceText: string) {
+  playChime('ring');
+  const text = `Proximity alert! ${memberName} is currently nearby (${distanceText})!`;
+  speakNotification(text);
+  showSystemNotification(`📍 Nearby Alert: ${memberName} is close!`, `${memberName} is ${distanceText} from your location.`);
+}
+
 /** Task Operation Notification */
 export function notifyTaskAction(action: 'created' | 'completed', title: string, userName?: string) {
   playChime(action === 'completed' ? 'success' : 'info');
@@ -327,3 +335,4 @@ export function notifyTaskAction(action: 'created' | 'completed', title: string,
     showSystemNotification('New Task Added', text);
   }
 }
+

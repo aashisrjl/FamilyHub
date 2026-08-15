@@ -2,7 +2,8 @@ import { create } from 'zustand';
 import { supabase } from './supabase';
 import type { Family, Profile, MotorSession, SosAlert, RingAlert, TankType } from './types';
 import { generateFamilyCode } from './helpers';
-import { notifyMotorAction, notifyGateToggle, stopContinuousAlarm } from './sound-notifications';
+import { notifyMotorAction, notifyGateToggle, stopContinuousAlarm, notifyProximityAlert } from './sound-notifications';
+import { getCurrentUserLocation, updateUserLocationInDB, calculateDistance, formatDistance } from './location-utils';
 
 interface FamilyState {
   family: Family | null;
@@ -13,6 +14,7 @@ interface FamilyState {
   incomingRing: RingAlert | null;
   isGateLocked: boolean;
   motorAlarmActive: boolean;
+  myLocation: { latitude: number; longitude: number } | null;
   loading: boolean;
   error: string | null;
 
@@ -24,6 +26,8 @@ interface FamilyState {
   toggleGate: (senderName?: string) => boolean;
   broadcastMotorAction: (action: 'start' | 'stop' | 'expire', session: MotorSession | null, tank?: TankType, senderName?: string) => void;
   sendRingAlert: (targetId: string | null, senderId: string, senderName: string) => Promise<void>;
+  updateMyLocation: (userId: string, senderName?: string) => Promise<{ latitude: number; longitude: number } | null>;
+  broadcastLocationUpdate: (latitude: number, longitude: number, senderId: string, senderName: string) => void;
   clearIncomingRing: () => void;
   clearSos: () => void;
   setMotorAlarmActive: (active: boolean) => void;
@@ -51,6 +55,7 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
   incomingRing: null,
   isGateLocked: true,
   motorAlarmActive: false,
+  myLocation: null,
   loading: false,
   error: null,
 
@@ -279,6 +284,25 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
           });
         }
       })
+      .on('broadcast', { event: 'location_update' }, (payload) => {
+        if (payload?.payload?.sender_id && payload?.payload?.latitude && payload?.payload?.longitude) {
+          const { sender_id, latitude, longitude, sender_name } = payload.payload;
+          const updatedMembers = get().members.map((m) =>
+            m.id === sender_id ? { ...m, latitude, longitude, location_updated_at: new Date().toISOString() } : m
+          );
+          set({ members: updatedMembers });
+
+          // Check if sender is near my location (< 500 meters)
+          const myLoc = get().myLocation;
+          if (myLoc) {
+            const dist = calculateDistance(myLoc.latitude, myLoc.longitude, latitude, longitude);
+            if (dist <= 500) {
+              const distText = formatDistance(dist);
+              notifyProximityAlert(sender_name || 'A family member', distText);
+            }
+          }
+        }
+      })
       .subscribe();
 
     activeHubChannel = hubSub;
@@ -288,7 +312,7 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
   /** Full reset — only call on sign-out */
   unsubscribe: () => {
     dropChannels();
-    set({ family: null, members: [], membersReady: false, activeMotorSession: null, recentSos: null, incomingRing: null });
+    set({ family: null, members: [], membersReady: false, activeMotorSession: null, recentSos: null, incomingRing: null, myLocation: null });
   },
 
   fetchMotorSession: async (familyId: string) => {
@@ -354,6 +378,31 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
           id: data?.id,
           sender_id: senderId,
           target_id: targetId,
+          sender_name: senderName,
+        },
+      });
+    }
+  },
+
+  updateMyLocation: async (userId: string, senderName?: string) => {
+    const loc = await getCurrentUserLocation();
+    if (!loc) return null;
+
+    set({ myLocation: loc });
+    await updateUserLocationInDB(userId, loc.latitude, loc.longitude);
+    get().broadcastLocationUpdate(loc.latitude, loc.longitude, userId, senderName ?? 'Family Member');
+    return loc;
+  },
+
+  broadcastLocationUpdate: (latitude: number, longitude: number, senderId: string, senderName: string) => {
+    if (activeHubChannel) {
+      activeHubChannel.send({
+        type: 'broadcast',
+        event: 'location_update',
+        payload: {
+          sender_id: senderId,
+          latitude,
+          longitude,
           sender_name: senderName,
         },
       });

@@ -34,13 +34,16 @@ import {
   Volume2,
   Shield,
   Share2,
+  MapPin,
+  Navigation,
 } from 'lucide-react-native';
 import * as Clipboard from 'expo-clipboard';
 import * as Haptics from 'expo-haptics';
+import { calculateDistance, formatDistance } from '@/lib/location-utils';
 
 export default function MembersScreen() {
   const { user, profile, signOut, updateProfile, refreshProfile } = useAuthStore();
-  const { family, members, membersReady, subscribe, incomingRing, clearIncomingRing, sendRingAlert } = useFamilyStore();
+  const { family, members, membersReady, subscribe, incomingRing, clearIncomingRing, sendRingAlert, myLocation, updateMyLocation } = useFamilyStore();
   const [showRingModal, setShowRingModal] = useState(false);
   const [ringTarget, setRingTarget] = useState<string | null>(null);
   const [showStatusModal, setShowStatusModal] = useState(false);
@@ -49,6 +52,8 @@ export default function MembersScreen() {
   const [ringing, setRinging] = useState(false);
   const [showRingAlert, setShowRingAlert] = useState(false);
   const [codeCopied, setCodeCopied] = useState(false);
+  const [locating, setLocating] = useState(false);
+  const [locationStatus, setLocationStatus] = useState<string | null>(null);
 
   useEffect(() => {
     if (family) subscribe(family.id);
@@ -117,12 +122,48 @@ export default function MembersScreen() {
     clearIncomingRing();
   };
 
+  const handleUpdateLocation = async () => {
+    if (!user) return;
+    setLocating(true);
+    setLocationStatus('Fetching GPS location...');
+    const loc = await updateMyLocation(user.id, profile?.display_name);
+    setLocating(false);
+
+    if (loc) {
+      const nearby = members.filter((m) => {
+        if (m.id === user.id) return false;
+        if (typeof m.latitude === 'number' && typeof m.longitude === 'number') {
+          const dist = calculateDistance(loc.latitude, loc.longitude, m.latitude, m.longitude);
+          return dist <= 500;
+        }
+        return false;
+      });
+
+      if (nearby.length > 0) {
+        setLocationStatus(`📍 Location updated! ${nearby.length} family member(s) nearby.`);
+        for (const n of nearby) {
+          sendRingAlert(n.id, user.id, profile?.display_name ?? 'Family Member');
+        }
+      } else {
+        setLocationStatus('📍 Location updated and shared with family!');
+      }
+    } else {
+      setLocationStatus('⚠️ Could not access GPS location. Check permissions.');
+    }
+  };
+
   const otherMembers = members.filter((m) => m.id !== user?.id);
 
   const renderMember = ({ item }: { item: typeof members[0] }) => {
     const idx = colorIndexFor(item.id);
     const sc = statusColors[item.status];
     const isMe = item.id === user?.id;
+
+    let distanceStr: string | null = null;
+    if (!isMe && myLocation && typeof item.latitude === 'number' && typeof item.longitude === 'number') {
+      const meters = calculateDistance(myLocation.latitude, myLocation.longitude, item.latitude, item.longitude);
+      distanceStr = formatDistance(meters);
+    }
 
     return (
       <View style={styles.memberCard}>
@@ -131,9 +172,17 @@ export default function MembersScreen() {
           <Text style={styles.memberName}>
             {item.display_name} {isMe && '(You)'}
           </Text>
-          <View style={[styles.statusBadge, { backgroundColor: sc.bg }]}>
-            <View style={[styles.statusDot, { backgroundColor: sc.dot }]} />
-            <Text style={[styles.statusText, { color: sc.text }]}>{statusLabels[item.status]}</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+            <View style={[styles.statusBadge, { backgroundColor: sc.bg }]}>
+              <View style={[styles.statusDot, { backgroundColor: sc.dot }]} />
+              <Text style={[styles.statusText, { color: sc.text }]}>{statusLabels[item.status]}</Text>
+            </View>
+            {distanceStr && (
+              <View style={styles.distanceBadge}>
+                <MapPin size={11} color={colors.primary[600]} strokeWidth={2} />
+                <Text style={styles.distanceText}>{distanceStr}</Text>
+              </View>
+            )}
           </View>
         </View>
         {!isMe && (
@@ -202,6 +251,29 @@ export default function MembersScreen() {
                 </View>
               </View>
             )}
+
+            {/* Location & Proximity Action Card */}
+            <View style={styles.locationCard}>
+              <View style={styles.locationHeader}>
+                <Navigation size={20} color={colors.primary[600]} strokeWidth={2} />
+                <Text style={styles.locationTitle}>Proximity & Location Sync</Text>
+              </View>
+              <Text style={styles.locationSubtitle}>
+                Sync your GPS location with your family. If family members are nearby (within 500m), an automatic proximity notification & ring will be triggered!
+              </Text>
+              <TouchableOpacity
+                style={styles.locationBtn}
+                onPress={handleUpdateLocation}
+                disabled={locating}
+                activeOpacity={0.8}
+              >
+                <MapPin size={18} color={colors.neutral[0]} strokeWidth={2} />
+                <Text style={styles.locationBtnText}>
+                  {locating ? 'Updating GPS Location...' : 'Sync Location & Check Nearby'}
+                </Text>
+              </TouchableOpacity>
+              {locationStatus && <Text style={styles.locationStatusText}>{locationStatus}</Text>}
+            </View>
 
             {/* Ring All Button */}
             {otherMembers.length > 0 && (
@@ -569,6 +641,70 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: typography.fontFamilyBold,
     color: colors.error[500],
+  },
+  // Location Proximity Card
+  locationCard: {
+    backgroundColor: colors.primary[50],
+    borderRadius: radius.xl,
+    padding: spacing.lg,
+    marginBottom: spacing.md,
+    borderWidth: 1.5,
+    borderColor: colors.primary[200],
+  },
+  locationHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginBottom: spacing.xs,
+  },
+  locationTitle: {
+    fontSize: 16,
+    fontFamily: typography.fontFamilyBold,
+    color: colors.primary[700],
+  },
+  locationSubtitle: {
+    fontSize: 13,
+    fontFamily: typography.fontFamilyRegular,
+    color: colors.neutral[600],
+    marginBottom: spacing.md,
+    lineHeight: 18,
+  },
+  locationBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    backgroundColor: colors.primary[500],
+    paddingVertical: spacing.md,
+    borderRadius: radius.lg,
+  },
+  locationBtnText: {
+    fontSize: 14,
+    fontFamily: typography.fontFamilyBold,
+    color: colors.neutral[0],
+  },
+  locationStatusText: {
+    fontSize: 12,
+    fontFamily: typography.fontFamilyMedium,
+    color: colors.primary[700],
+    marginTop: spacing.sm,
+    textAlign: 'center',
+  },
+  distanceBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: colors.primary[50],
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 3,
+    borderRadius: radius.full,
+    borderWidth: 1,
+    borderColor: colors.primary[200],
+  },
+  distanceText: {
+    fontSize: 11,
+    fontFamily: typography.fontFamilyMedium,
+    color: colors.primary[700],
   },
   // Member cards
   memberCard: {

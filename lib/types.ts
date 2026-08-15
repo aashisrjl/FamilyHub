@@ -22,6 +22,9 @@ export interface Profile {
   avatar_url: string | null;
   status: MemberStatus;
   fcm_token: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  location_updated_at?: string | null;
   created_at: string;
 }
 
