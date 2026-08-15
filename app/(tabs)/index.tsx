@@ -167,7 +167,13 @@ export default function DashboardScreen() {
   const handleStartMotor = async () => {
     if (!family || !user) return;
     setMotorError(null);
-    const { error } = await startMotorSession(family.id, user.id, selectedTank, duration);
+    const { error } = await startMotorSession(
+      family.id,
+      user.id,
+      selectedTank,
+      duration,
+      profile?.display_name
+    );
     if (error) {
       setMotorError(error);
     } else {
@@ -178,7 +184,7 @@ export default function DashboardScreen() {
 
   const handleStopMotor = async () => {
     if (!activeMotorSession) return;
-    await stopMotorSession(activeMotorSession.id, family?.id);
+    await stopMotorSession(activeMotorSession.id, family?.id, profile?.display_name);
     notifyMotorAction('stop', undefined, profile?.display_name);
   };
 

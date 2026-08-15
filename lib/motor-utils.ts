@@ -59,7 +59,8 @@ export async function startMotorSession(
   familyId: string,
   userId: string,
   tank: TankType,
-  durationMinutes: number
+  durationMinutes: number,
+  senderName?: string
 ): Promise<{ error: string | null }> {
   // End any existing active session for this family
   await supabase
@@ -85,7 +86,9 @@ export async function startMotorSession(
   }
 
   if (data) {
-    useFamilyStore.setState({ activeMotorSession: data as MotorSession });
+    const session = data as MotorSession;
+    useFamilyStore.setState({ activeMotorSession: session });
+    useFamilyStore.getState().broadcastMotorAction('start', session, tank, senderName);
   }
 
   // Refetch to guarantee sync
@@ -97,9 +100,14 @@ export async function startMotorSession(
 /**
  * Stop the active motor session.
  */
-export async function stopMotorSession(sessionId: string, familyId?: string): Promise<{ error: string | null }> {
+export async function stopMotorSession(
+  sessionId: string,
+  familyId?: string,
+  senderName?: string
+): Promise<{ error: string | null }> {
   // Instantly clear local state so UI updates without delay or refresh
   useFamilyStore.setState({ activeMotorSession: null });
+  useFamilyStore.getState().broadcastMotorAction('stop', null, undefined, senderName);
 
   const { error } = await supabase
     .from('motor_sessions')

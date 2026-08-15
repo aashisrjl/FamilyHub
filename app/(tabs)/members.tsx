@@ -40,7 +40,7 @@ import * as Haptics from 'expo-haptics';
 
 export default function MembersScreen() {
   const { user, profile, signOut, updateProfile, refreshProfile } = useAuthStore();
-  const { family, members, membersReady, subscribe, incomingRing, clearIncomingRing } = useFamilyStore();
+  const { family, members, membersReady, subscribe, incomingRing, clearIncomingRing, sendRingAlert } = useFamilyStore();
   const [showRingModal, setShowRingModal] = useState(false);
   const [ringTarget, setRingTarget] = useState<string | null>(null);
   const [showStatusModal, setShowStatusModal] = useState(false);
@@ -69,11 +69,7 @@ export default function MembersScreen() {
   const handleRing = async (targetId: string | null) => {
     if (!family || !user) return;
     setRinging(true);
-    await supabase.from('ring_alerts').insert({
-      family_id: family.id,
-      sender_id: user.id,
-      target_id: targetId,
-    });
+    await sendRingAlert(targetId, user.id, profile?.display_name ?? 'Family Member');
     if (Platform.OS !== 'web') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     }

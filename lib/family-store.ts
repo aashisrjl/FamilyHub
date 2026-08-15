@@ -1,7 +1,8 @@
 import { create } from 'zustand';
 import { supabase } from './supabase';
-import type { Family, Profile, MotorSession, SosAlert, RingAlert } from './types';
+import type { Family, Profile, MotorSession, SosAlert, RingAlert, TankType } from './types';
 import { generateFamilyCode } from './helpers';
+import { notifyMotorAction, notifyGateToggle } from './sound-notifications';
 
 interface FamilyState {
   family: Family | null;
@@ -20,20 +21,22 @@ interface FamilyState {
   unsubscribe: () => void;
   fetchMotorSession: (familyId: string) => Promise<void>;
   toggleGate: (senderName?: string) => boolean;
+  broadcastMotorAction: (action: 'start' | 'stop', session: MotorSession | null, tank?: TankType, senderName?: string) => void;
+  sendRingAlert: (targetId: string | null, senderId: string, senderName: string) => Promise<void>;
   clearIncomingRing: () => void;
   clearSos: () => void;
 }
 
 let subscriptions: { unsubscribe: () => void }[] = [];
 let subscribedFamilyId: string | null = null;
-let activeGateChannel: ReturnType<typeof supabase.channel> | null = null;
+let activeHubChannel: ReturnType<typeof supabase.channel> | null = null;
 
 /** Tear down realtime channels WITHOUT wiping cached data. */
 function dropChannels() {
   subscriptions.forEach((s) => s.unsubscribe());
   subscriptions = [];
   subscribedFamilyId = null;
-  activeGateChannel = null;
+  activeHubChannel = null;
 }
 
 export const useFamilyStore = create<FamilyState>((set, get) => ({
@@ -238,18 +241,38 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
       )
       .subscribe();
 
-    // Subscribe to realtime gate lock/unlock broadcast
-    const gateSub = supabase
-      .channel(`gate-${familyId}`, { config: { broadcast: { self: false } } })
+    // Subscribe to unified realtime hub channel for instant cross-device broadcast signals
+    const hubSub = supabase
+      .channel(`hub-${familyId}`, { config: { broadcast: { self: false } } })
       .on('broadcast', { event: 'gate_toggle' }, (payload) => {
         if (payload?.payload?.isGateLocked !== undefined) {
           set({ isGateLocked: payload.payload.isGateLocked });
+          notifyGateToggle(payload.payload.isGateLocked, payload.payload.sender_name);
+        }
+      })
+      .on('broadcast', { event: 'motor_toggle' }, (payload) => {
+        if (payload?.payload) {
+          set({ activeMotorSession: payload.payload.session ?? null });
+          notifyMotorAction(payload.payload.action, payload.payload.tank, payload.payload.sender_name);
+        }
+      })
+      .on('broadcast', { event: 'ring_user' }, (payload) => {
+        if (payload?.payload) {
+          set({
+            incomingRing: {
+              id: payload.payload.id || 'ring-broadcast',
+              family_id: familyId,
+              sender_id: payload.payload.sender_id,
+              target_id: payload.payload.target_id ?? null,
+              created_at: new Date().toISOString(),
+            },
+          });
         }
       })
       .subscribe();
 
-    activeGateChannel = gateSub;
-    subscriptions = [familyDbSub, membersSub, motorSub, sosSub, ringSub, gateSub];
+    activeHubChannel = hubSub;
+    subscriptions = [familyDbSub, membersSub, motorSub, sosSub, ringSub, hubSub];
   },
 
   /** Full reset — only call on sign-out */
@@ -279,14 +302,52 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
       supabase.from('families').update({ is_gate_locked: nextState }).eq('id', famId).then();
     }
 
-    if (activeGateChannel) {
-      activeGateChannel.send({
+    if (activeHubChannel) {
+      activeHubChannel.send({
         type: 'broadcast',
         event: 'gate_toggle',
         payload: { isGateLocked: nextState, sender_name: senderName ?? 'Family Member' },
       });
     }
     return nextState;
+  },
+
+  broadcastMotorAction: (action, session, tank, senderName) => {
+    if (activeHubChannel) {
+      activeHubChannel.send({
+        type: 'broadcast',
+        event: 'motor_toggle',
+        payload: { action, session, tank, sender_name: senderName ?? 'Family Member' },
+      });
+    }
+  },
+
+  sendRingAlert: async (targetId, senderId, senderName) => {
+    const famId = get().family?.id;
+    if (!famId) return;
+
+    const { data } = await supabase
+      .from('ring_alerts')
+      .insert({
+        family_id: famId,
+        sender_id: senderId,
+        target_id: targetId,
+      })
+      .select()
+      .maybeSingle();
+
+    if (activeHubChannel) {
+      activeHubChannel.send({
+        type: 'broadcast',
+        event: 'ring_user',
+        payload: {
+          id: data?.id,
+          sender_id: senderId,
+          target_id: targetId,
+          sender_name: senderName,
+        },
+      });
+    }
   },
 
   clearIncomingRing: () => set({ incomingRing: null }),
