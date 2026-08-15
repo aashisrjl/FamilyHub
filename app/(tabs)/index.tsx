@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, Modal, Platform, TextInput } from 'react-native';
+import { StyleSheet, View, Text, TouchableOpacity, Modal, Platform, TextInput, ScrollView } from 'react-native';
 import { useRouter, Stack } from 'expo-router';
 import * as Speech from 'expo-speech';
 import { useAuthStore } from '@/lib/auth-store';
@@ -223,7 +223,11 @@ export default function DashboardScreen() {
       : 0;
 
   return (
-    <View style={styles.container}>
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={styles.scrollContent}
+      showsVerticalScrollIndicator={false}
+    >
       <Stack.Screen options={{ headerShown: false }} />
       <View style={styles.header}>
         <View>
@@ -550,7 +554,7 @@ export default function DashboardScreen() {
           </View>
         </View>
       </Modal>
-    </View>
+    </ScrollView>
   );
 }
 
@@ -559,6 +563,9 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.neutral[50],
     paddingHorizontal: spacing.lg,
+  },
+  scrollContent: {
+    paddingBottom: 120,
   },
   header: {
     flexDirection: 'row',
