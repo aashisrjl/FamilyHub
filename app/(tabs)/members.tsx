@@ -36,14 +36,15 @@ import {
   Share2,
   MapPin,
   Navigation,
+  Home,
 } from 'lucide-react-native';
 import * as Clipboard from 'expo-clipboard';
 import * as Haptics from 'expo-haptics';
-import { calculateDistance, formatDistance } from '@/lib/location-utils';
+import { calculateDistance, formatDistance, getCurrentUserLocation } from '@/lib/location-utils';
 
 export default function MembersScreen() {
   const { user, profile, signOut, updateProfile, refreshProfile } = useAuthStore();
-  const { family, members, membersReady, subscribe, incomingRing, clearIncomingRing, sendRingAlert, myLocation, updateMyLocation } = useFamilyStore();
+  const { family, members, membersReady, subscribe, incomingRing, clearIncomingRing, sendRingAlert, myLocation, updateMyLocation, setHomeLocation } = useFamilyStore();
   const [showStatusModal, setShowStatusModal] = useState(false);
   const [showEditName, setShowEditName] = useState(false);
   const [displayName, setDisplayName] = useState('');
@@ -133,6 +134,23 @@ export default function MembersScreen() {
     }
   };
 
+  const handleSetHomeLocation = async () => {
+    setLocating(true);
+    setLocationStatus('Updating Family Home location...');
+    const loc = await getCurrentUserLocation();
+    setLocating(false);
+    if (loc) {
+      const ok = await setHomeLocation(loc.latitude, loc.longitude, 'Family Home');
+      if (ok) {
+        setLocationStatus('🏠 Family Home location updated successfully!');
+      } else {
+        setLocationStatus('⚠️ Failed to save home location.');
+      }
+    } else {
+      setLocationStatus('⚠️ GPS unavailable to set home location.');
+    }
+  };
+
   const otherMembers = members.filter((m) => m.id !== user?.id);
 
   const renderMember = ({ item }: { item: typeof members[0] }) => {
@@ -144,6 +162,17 @@ export default function MembersScreen() {
     if (!isMe && myLocation && typeof item.latitude === 'number' && typeof item.longitude === 'number') {
       const meters = calculateDistance(myLocation.latitude, myLocation.longitude, item.latitude, item.longitude);
       distanceStr = formatDistance(meters);
+    }
+
+    let homeBadge: { label: string; isHome: boolean } | null = null;
+    if (family?.home_latitude && family?.home_longitude && typeof item.latitude === 'number' && typeof item.longitude === 'number') {
+      const radius = family.home_radius_meters ?? 200;
+      const metersToHome = calculateDistance(item.latitude, item.longitude, family.home_latitude, family.home_longitude);
+      if (metersToHome <= radius) {
+        homeBadge = { label: '🏠 At Home', isHome: true };
+      } else {
+        homeBadge = { label: `🚗 Away (${formatDistance(metersToHome)})`, isHome: false };
+      }
     }
 
     return (
@@ -158,6 +187,15 @@ export default function MembersScreen() {
               <View style={[styles.statusDot, { backgroundColor: sc.dot }]} />
               <Text style={[styles.statusText, { color: sc.text }]}>{statusLabels[item.status]}</Text>
             </View>
+
+            {homeBadge && (
+              <View style={[styles.homeGeofenceBadge, homeBadge.isHome ? styles.homeBadgeAtHome : styles.homeBadgeAway]}>
+                <Text style={[styles.homeGeofenceText, homeBadge.isHome ? styles.homeTextAtHome : styles.homeTextAway]}>
+                  {homeBadge.label}
+                </Text>
+              </View>
+            )}
+
             {distanceStr && (
               <View style={styles.distanceBadge}>
                 <MapPin size={11} color={colors.primary[600]} strokeWidth={2} />
@@ -254,6 +292,28 @@ export default function MembersScreen() {
                 </Text>
               </TouchableOpacity>
               {locationStatus && <Text style={styles.locationStatusText}>{locationStatus}</Text>}
+            </View>
+
+            {/* Family Home Location Card */}
+            <View style={styles.homeLocationCard}>
+              <View style={styles.locationHeader}>
+                <Home size={20} color={colors.secondary[600]} strokeWidth={2} />
+                <Text style={styles.homeLocationTitle}>Family Home Surrounding</Text>
+              </View>
+              <Text style={styles.locationSubtitle}>
+                {family?.home_latitude && family?.home_longitude
+                  ? `Home location recorded (${family.home_address_name || 'Family Home'}). System tracks family members entering/leaving within ${family.home_radius_meters ?? 200}m.`
+                  : 'Home location not set. Tap below to establish current GPS location as Family Home for arrival/departure alerts.'}
+              </Text>
+              <TouchableOpacity
+                style={styles.setHomeBtn}
+                onPress={handleSetHomeLocation}
+                disabled={locating}
+                activeOpacity={0.8}
+              >
+                <Home size={18} color={colors.secondary[700]} strokeWidth={2} />
+                <Text style={styles.setHomeBtnText}>Set Current Location as Family Home</Text>
+              </TouchableOpacity>
             </View>
 
             {/* Ring All Button */}
@@ -671,6 +731,60 @@ const styles = StyleSheet.create({
     fontFamily: typography.fontFamilyMedium,
     color: colors.primary[700],
   },
+  // Family Home Location Card
+  homeLocationCard: {
+    backgroundColor: colors.secondary[50],
+    borderRadius: radius.xl,
+    padding: spacing.lg,
+    marginBottom: spacing.md,
+    borderWidth: 1.5,
+    borderColor: colors.secondary[200],
+  },
+  homeLocationTitle: {
+    fontSize: 16,
+    fontFamily: typography.fontFamilyBold,
+    color: colors.secondary[700],
+  },
+  setHomeBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    backgroundColor: colors.neutral[0],
+    paddingVertical: spacing.md - 2,
+    borderRadius: radius.lg,
+    borderWidth: 1.5,
+    borderColor: colors.secondary[300],
+  },
+  setHomeBtnText: {
+    fontSize: 13,
+    fontFamily: typography.fontFamilyBold,
+    color: colors.secondary[700],
+  },
+  homeGeofenceBadge: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 3,
+    borderRadius: radius.full,
+    borderWidth: 1,
+  },
+  homeBadgeAtHome: {
+    backgroundColor: colors.success[50],
+    borderColor: colors.success[200],
+  },
+  homeBadgeAway: {
+    backgroundColor: colors.warning[50],
+    borderColor: colors.warning[200],
+  },
+  homeGeofenceText: {
+    fontSize: 11,
+    fontFamily: typography.fontFamilyBold,
+  },
+  homeTextAtHome: {
+    color: colors.success[700],
+  },
+  homeTextAway: {
+    color: colors.warning[700],
+  },
   // Member cards
   memberCard: {
     flexDirection: 'row',
@@ -741,43 +855,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: typography.fontFamilyRegular,
     color: colors.neutral[900],
-    marginBottom: spacing.lg,
-  },
-  // Ring alert
-  ringAlertOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(33,133,216,0.4)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: spacing.xl,
-  },
-  ringAlertCard: {
-    backgroundColor: colors.neutral[0],
-    borderRadius: radius.xl,
-    padding: spacing.xl,
-    alignItems: 'center',
-    width: '100%',
-  },
-  ringAlertIcon: {
-    width: 88,
-    height: 88,
-    borderRadius: 44,
-    backgroundColor: colors.secondary[500],
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: spacing.lg,
-  },
-  ringAlertTitle: {
-    fontSize: 24,
-    fontFamily: typography.fontFamilyBold,
-    color: colors.secondary[700],
-    marginBottom: spacing.sm,
-  },
-  ringAlertBody: {
-    fontSize: 16,
-    fontFamily: typography.fontFamilyRegular,
-    color: colors.neutral[600],
-    textAlign: 'center',
     marginBottom: spacing.lg,
   },
 });

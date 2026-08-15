@@ -322,6 +322,22 @@ export function notifyProximityAlert(memberName: string, distanceText: string) {
   showSystemNotification(`📍 Nearby Alert: ${memberName} is close!`, `${memberName} is ${distanceText} from your location.`);
 }
 
+/** Home Geofence Arrival Alert */
+export function notifyHomeArrival(memberName: string) {
+  playChime('success');
+  const text = `${memberName} has arrived at home!`;
+  speakNotification(text);
+  showSystemNotification(`🏠 Arrival Alert: ${memberName} is home!`, `${memberName} has entered the family home surrounding area.`);
+}
+
+/** Home Geofence Departure Alert */
+export function notifyHomeDeparture(memberName: string, distanceText: string) {
+  playChime('info');
+  const text = `${memberName} has left home (${distanceText})!`;
+  speakNotification(text);
+  showSystemNotification(`🚗 Departure Alert: ${memberName} left home!`, `${memberName} is currently ${distanceText} away from home.`);
+}
+
 /** Task Operation Notification */
 export function notifyTaskAction(action: 'created' | 'completed', title: string, userName?: string) {
   playChime(action === 'completed' ? 'success' : 'info');

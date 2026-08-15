@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { supabase } from './supabase';
 import type { Family, Profile, MotorSession, SosAlert, RingAlert, TankType } from './types';
 import { generateFamilyCode } from './helpers';
-import { notifyMotorAction, notifyGateToggle, stopContinuousAlarm, notifyProximityAlert } from './sound-notifications';
+import { notifyMotorAction, notifyGateToggle, stopContinuousAlarm, notifyProximityAlert, notifyHomeArrival, notifyHomeDeparture } from './sound-notifications';
 import { getCurrentUserLocation, updateUserLocationInDB, calculateDistance, formatDistance } from './location-utils';
 
 interface FamilyState {
@@ -28,6 +28,7 @@ interface FamilyState {
   sendRingAlert: (targetId: string | null, senderId: string, senderName: string) => Promise<void>;
   updateMyLocation: (userId: string, senderName?: string) => Promise<{ latitude: number; longitude: number } | null>;
   broadcastLocationUpdate: (latitude: number, longitude: number, senderId: string, senderName: string) => void;
+  setHomeLocation: (latitude: number, longitude: number, addressName?: string) => Promise<boolean>;
   clearIncomingRing: () => void;
   clearSos: () => void;
   setMotorAlarmActive: (active: boolean) => void;
@@ -37,6 +38,7 @@ interface FamilyState {
 let subscriptions: { unsubscribe: () => void }[] = [];
 let subscribedFamilyId: string | null = null;
 let activeHubChannel: ReturnType<typeof supabase.channel> | null = null;
+let memberGeofenceState = new Map<string, boolean>();
 
 /** Tear down realtime channels WITHOUT wiping cached data. */
 function dropChannels() {
@@ -62,24 +64,48 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
   createFamily: async (name, userId) => {
     set({ error: null, loading: true });
     const code = generateFamilyCode();
+
+    // Fetch creator's GPS location to establish Family Home Location automatically
+    const initialLoc = await getCurrentUserLocation();
+
+    const familyData: any = {
+      name,
+      code,
+      created_by: userId,
+    };
+    if (initialLoc) {
+      familyData.home_latitude = initialLoc.latitude;
+      familyData.home_longitude = initialLoc.longitude;
+      familyData.home_address_name = 'Family Home';
+      familyData.home_radius_meters = 200;
+    }
+
     const { data: fam, error: famError } = await supabase
       .from('families')
-      .insert({ name, code, created_by: userId })
+      .insert(familyData)
       .select()
       .single();
     if (famError) {
       set({ error: famError.message, loading: false });
       return { error: famError.message };
     }
+
+    const profileUpdateData: any = { family_id: fam.id };
+    if (initialLoc) {
+      profileUpdateData.latitude = initialLoc.latitude;
+      profileUpdateData.longitude = initialLoc.longitude;
+      profileUpdateData.location_updated_at = new Date().toISOString();
+    }
+
     const { error: profileError } = await supabase
       .from('profiles')
-      .update({ family_id: fam.id })
+      .update(profileUpdateData)
       .eq('id', userId);
     if (profileError) {
       set({ error: profileError.message, loading: false });
       return { error: profileError.message };
     }
-    set({ family: fam as Family, loading: false });
+    set({ family: fam as Family, myLocation: initialLoc, loading: false });
     get().subscribe(fam.id);
     return { error: null };
   },
@@ -292,7 +318,25 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
           );
           set({ members: updatedMembers });
 
-          // Check if sender is near my location (< 500 meters)
+          // 1. Geofence Arrival / Departure tracking relative to Family Home Location
+          const currentFamily = get().family;
+          if (currentFamily?.home_latitude && currentFamily?.home_longitude) {
+            const homeRadius = currentFamily.home_radius_meters ?? 200;
+            const distToHome = calculateDistance(latitude, longitude, currentFamily.home_latitude, currentFamily.home_longitude);
+            const isNowAtHome = distToHome <= homeRadius;
+            const wasAtHome = memberGeofenceState.get(sender_id);
+
+            if (wasAtHome !== undefined && wasAtHome !== isNowAtHome) {
+              if (isNowAtHome) {
+                notifyHomeArrival(sender_name || 'A family member');
+              } else {
+                notifyHomeDeparture(sender_name || 'A family member', formatDistance(distToHome));
+              }
+            }
+            memberGeofenceState.set(sender_id, isNowAtHome);
+          }
+
+          // 2. Check if sender is near my location (< 500 meters)
           const myLoc = get().myLocation;
           if (myLoc) {
             const dist = calculateDistance(myLoc.latitude, myLoc.longitude, latitude, longitude);
@@ -312,6 +356,7 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
   /** Full reset — only call on sign-out */
   unsubscribe: () => {
     dropChannels();
+    memberGeofenceState.clear();
     set({ family: null, members: [], membersReady: false, activeMotorSession: null, recentSos: null, incomingRing: null, myLocation: null });
   },
 
@@ -407,6 +452,36 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
         },
       });
     }
+  },
+
+  setHomeLocation: async (latitude: number, longitude: number, addressName?: string) => {
+    const famId = get().family?.id;
+    if (!famId) return false;
+
+    const { error } = await supabase
+      .from('families')
+      .update({
+        home_latitude: latitude,
+        home_longitude: longitude,
+        home_address_name: addressName || 'Family Home',
+        home_radius_meters: 200,
+      })
+      .eq('id', famId);
+
+    if (!error) {
+      set((state) => ({
+        family: state.family
+          ? {
+              ...state.family,
+              home_latitude: latitude,
+              home_longitude: longitude,
+              home_address_name: addressName || 'Family Home',
+              home_radius_meters: 200,
+            }
+          : null,
+      }));
+    }
+    return false;
   },
 
   clearIncomingRing: () => set({ incomingRing: null }),

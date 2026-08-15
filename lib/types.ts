@@ -13,6 +13,10 @@ export interface Family {
   created_by: string;
   created_at: string;
   is_gate_locked?: boolean;
+  home_latitude?: number | null;
+  home_longitude?: number | null;
+  home_address_name?: string | null;
+  home_radius_meters?: number | null;
 }
 
 export interface Profile {
