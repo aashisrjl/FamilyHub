@@ -184,23 +184,6 @@ export default function MembersScreen() {
     }
   };
 
-  const handleSetHomeLocation = async () => {
-    setLocating(true);
-    setLocationStatus('Updating Family Home location...');
-    const loc = await getCurrentUserLocation();
-    setLocating(false);
-    if (loc) {
-      const ok = await setHomeLocation(loc.latitude, loc.longitude, 'Family Home');
-      if (ok) {
-        setLocationStatus('🏠 Family Home location updated successfully!');
-      } else {
-        setLocationStatus('⚠️ Failed to save home location.');
-      }
-    } else {
-      setLocationStatus('⚠️ GPS unavailable to set home location.');
-    }
-  };
-
   const otherMembers = members.filter((m) => m.id !== user?.id);
 
   const renderMember = ({ item }: { item: typeof members[0] }) => {
@@ -351,14 +334,14 @@ export default function MembersScreen() {
               </View>
             )}
 
-            {/* Location & Proximity Action Card */}
+            {/* Location & Home Sync Card */}
             <View style={styles.locationCard}>
               <View style={styles.locationHeader}>
                 <Navigation size={20} color={colors.primary[600]} strokeWidth={2} />
-                <Text style={styles.locationTitle}>Proximity & Location Sync</Text>
+                <Text style={styles.locationTitle}>Location & Home Sync</Text>
               </View>
               <Text style={styles.locationSubtitle}>
-                Sync your GPS location with your family. If family members are nearby (within 500m), an automatic proximity notification & ring will be triggered!
+                Sync your location to automatically check distance from Family Home and alert nearby members.
               </Text>
               <TouchableOpacity
                 style={styles.locationBtn}
@@ -368,32 +351,10 @@ export default function MembersScreen() {
               >
                 <MapPin size={18} color={colors.neutral[0]} strokeWidth={2} />
                 <Text style={styles.locationBtnText}>
-                  {locating ? 'Updating GPS Location...' : 'Sync Location & Check Nearby'}
+                  {locating ? 'Syncing GPS Location...' : 'Sync My Location'}
                 </Text>
               </TouchableOpacity>
               {locationStatus && <Text style={styles.locationStatusText}>{locationStatus}</Text>}
-            </View>
-
-            {/* Family Home Location Card */}
-            <View style={styles.homeLocationCard}>
-              <View style={styles.locationHeader}>
-                <Home size={20} color={colors.secondary[600]} strokeWidth={2} />
-                <Text style={styles.homeLocationTitle}>Family Home Surrounding</Text>
-              </View>
-              <Text style={styles.locationSubtitle}>
-                {family?.home_latitude && family?.home_longitude
-                  ? `Home location recorded (${family.home_address_name || 'Family Home'}). System tracks family members entering/leaving within ${family.home_radius_meters ?? 200}m.`
-                  : 'Home location not set. Tap below to establish current GPS location as Family Home for arrival/departure alerts.'}
-              </Text>
-              <TouchableOpacity
-                style={styles.setHomeBtn}
-                onPress={handleSetHomeLocation}
-                disabled={locating}
-                activeOpacity={0.8}
-              >
-                <Home size={18} color={colors.secondary[700]} strokeWidth={2} />
-                <Text style={styles.setHomeBtnText}>Set Current Location as Family Home</Text>
-              </TouchableOpacity>
             </View>
 
             {/* Ring All Button */}
