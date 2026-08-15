@@ -1,11 +1,11 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, Modal, Platform, TextInput, ScrollView } from 'react-native';
+import { StyleSheet, View, Text, TouchableOpacity, Modal, Platform, TextInput, ScrollView, Linking } from 'react-native';
 import { useRouter, Stack } from 'expo-router';
 import * as Speech from 'expo-speech';
 import { useAuthStore } from '@/lib/auth-store';
 import { useFamilyStore } from '@/lib/family-store';
 import { useMotorTimer, startMotorSession, stopMotorSession } from '@/lib/motor-utils';
-import { colors, typography, radius, spacing } from '@/lib/theme';
+import { colors, typography, radius, spacing, statusColors, statusLabels } from '@/lib/theme';
 import { formatTimer } from '@/lib/helpers';
 import {
   notifyGateToggle,
@@ -35,6 +35,11 @@ import {
   Trash2,
   Edit3,
   Sliders,
+  Mail,
+  MessageSquare,
+  Phone,
+  Crown,
+  UserCheck,
 } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
 import * as Haptics from 'expo-haptics';
@@ -55,6 +60,7 @@ export default function DashboardScreen() {
     createQuickAction,
     updateQuickAction,
     deleteQuickAction,
+    sendRingAlert,
   } = useFamilyStore();
 
   const [showTimerModal, setShowTimerModal] = useState(false);
@@ -83,6 +89,7 @@ export default function DashboardScreen() {
   const [actionTank, setActionTank] = useState<'top' | 'down'>('top');
   const [actionDuration, setActionDuration] = useState(30);
   const [actionColor, setActionColor] = useState('#0284C7');
+  const [detailMember, setDetailMember] = useState<typeof members[0] | null>(null);
 
   const openCreateActionModal = () => {
     setEditingActionId(null);
@@ -543,12 +550,17 @@ export default function DashboardScreen() {
         {members.map((m) => {
           const idx = colorIndexFor(m.id);
           return (
-            <View key={m.id} style={styles.memberChip}>
+            <TouchableOpacity
+              key={m.id}
+              style={styles.memberChip}
+              onPress={() => setDetailMember(m)}
+              activeOpacity={0.8}
+            >
               <Avatar name={m.display_name} size={40} status={m.status} colorIndex={idx} />
               <Text style={styles.memberName} numberOfLines={1}>
                 {m.id === user?.id ? 'You' : m.display_name}
               </Text>
-            </View>
+            </TouchableOpacity>
           );
         })}
       </View>
@@ -720,8 +732,18 @@ export default function DashboardScreen() {
           )}
 
           <Text style={styles.inputLabel}>Default Duration (minutes)</Text>
-          <View style={styles.durationDisplay}>
-            <Text style={styles.durationValue}>{actionDuration}</Text>
+          <View style={styles.durationInputWrap}>
+            <TextInput
+              style={styles.durationTextInput}
+              keyboardType="number-pad"
+              value={String(actionDuration || '')}
+              onChangeText={(txt) => {
+                const val = parseInt(txt.replace(/[^0-9]/g, ''), 10);
+                setActionDuration(isNaN(val) ? 0 : val);
+              }}
+              placeholder="30"
+              placeholderTextColor={colors.neutral[400]}
+            />
             <Text style={styles.durationUnit}>minutes</Text>
           </View>
           <View style={styles.durationControls}>
@@ -789,6 +811,96 @@ export default function DashboardScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* Member Detail Profile Dialogue Modal */}
+      <ModalBase
+        visible={!!detailMember}
+        onClose={() => setDetailMember(null)}
+        title="Member Profile"
+      >
+        {detailMember && (() => {
+          const idx = colorIndexFor(detailMember.id);
+          const sc = statusColors[detailMember.status];
+          const isMemberAdmin = detailMember.role === 'admin' || family?.created_by === detailMember.id;
+          const isMe = detailMember.id === user?.id;
+
+          return (
+            <View style={styles.detailModalContent}>
+              <View style={styles.detailHeader}>
+                <Avatar name={detailMember.display_name} size={64} status={detailMember.status} colorIndex={idx} />
+                <View style={styles.detailHeaderInfo}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                    <Text style={styles.detailName}>{detailMember.display_name}</Text>
+                    {isMemberAdmin && (
+                      <View style={styles.adminBadge}>
+                        <Crown size={12} color="#D97706" strokeWidth={2.5} />
+                        <Text style={styles.adminBadgeText}>Admin</Text>
+                      </View>
+                    )}
+                  </View>
+                  <View style={[styles.statusBadge, { backgroundColor: sc.bg, marginTop: 4 }]}>
+                    <View style={[styles.statusDot, { backgroundColor: sc.dot }]} />
+                    <Text style={[styles.statusText, { color: sc.text }]}>{statusLabels[detailMember.status]}</Text>
+                  </View>
+                </View>
+              </View>
+
+              <View style={styles.detailDivider} />
+
+              <View style={styles.detailRow}>
+                <Mail size={18} color={colors.primary[600]} strokeWidth={2} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.detailLabel}>Email Address</Text>
+                  <Text style={styles.detailValue}>{detailMember.email || 'Not specified'}</Text>
+                </View>
+              </View>
+
+              <View style={styles.detailRow}>
+                <Phone size={18} color={colors.secondary[600]} strokeWidth={2} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.detailLabel}>Mobile Number</Text>
+                  <Text style={styles.detailValue}>{detailMember.phone_number || 'Not added yet'}</Text>
+                </View>
+              </View>
+
+              <View style={styles.detailActionsRow}>
+                {detailMember.phone_number ? (
+                  <>
+                    <TouchableOpacity
+                      style={[styles.detailActionBtn, styles.callBtn]}
+                      onPress={() => Linking.openURL(`tel:${detailMember.phone_number}`)}
+                    >
+                      <Phone size={16} color={colors.neutral[0]} strokeWidth={2} />
+                      <Text style={styles.detailActionBtnText}>Call</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={[styles.detailActionBtn, styles.smsBtn]}
+                      onPress={() => Linking.openURL(`sms:${detailMember.phone_number}`)}
+                    >
+                      <MessageSquare size={16} color={colors.primary[700]} strokeWidth={2} />
+                      <Text style={styles.smsBtnText}>SMS</Text>
+                    </TouchableOpacity>
+                  </>
+                ) : null}
+
+                {!isMe && (
+                  <TouchableOpacity
+                    style={[styles.detailActionBtn, styles.ringActionBtn]}
+                    onPress={() => {
+                      sendRingAlert(detailMember.id, user?.id ?? '', profile?.display_name ?? 'Family Member');
+                      setDetailMember(null);
+                    }}
+                  >
+                    <Bell size={16} color={colors.secondary[700]} strokeWidth={2} />
+                    <Text style={styles.ringActionBtnText}>Ring</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            </View>
+          );
+        })()}
+      </ModalBase>
     </ScrollView>
   );
 }
@@ -1316,5 +1428,147 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: spacing.lg,
     lineHeight: 24,
+  },
+  durationInputWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+    borderWidth: 1.5,
+    borderColor: colors.neutral[200],
+    borderRadius: radius.lg,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.xs,
+    marginBottom: spacing.md,
+    backgroundColor: colors.neutral[50],
+  },
+  durationTextInput: {
+    fontSize: 28,
+    fontFamily: typography.fontFamilyBold,
+    color: colors.primary[600],
+    minWidth: 50,
+    textAlign: 'center',
+    paddingVertical: spacing.xs,
+  },
+  // Detail Profile Dialogue Modal Styles
+  detailModalContent: {
+    paddingBottom: spacing.md,
+  },
+  detailHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.lg,
+    marginBottom: spacing.md,
+  },
+  detailHeaderInfo: {
+    flex: 1,
+  },
+  detailName: {
+    fontSize: 20,
+    fontFamily: typography.fontFamilyBold,
+    color: colors.neutral[900],
+  },
+  detailDivider: {
+    height: 1,
+    backgroundColor: colors.neutral[200],
+    marginVertical: spacing.md,
+  },
+  detailRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    backgroundColor: colors.neutral[50],
+    padding: spacing.md,
+    borderRadius: radius.lg,
+    marginBottom: spacing.sm,
+    borderWidth: 1,
+    borderColor: colors.neutral[200],
+  },
+  detailLabel: {
+    fontSize: 12,
+    fontFamily: typography.fontFamilyMedium,
+    color: colors.neutral[500],
+  },
+  detailValue: {
+    fontSize: 15,
+    fontFamily: typography.fontFamilyBold,
+    color: colors.neutral[800],
+    marginTop: 2,
+  },
+  detailActionsRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginTop: spacing.md,
+  },
+  detailActionBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: spacing.md,
+    borderRadius: radius.lg,
+  },
+  callBtn: {
+    backgroundColor: colors.success[600],
+  },
+  detailActionBtnText: {
+    fontSize: 14,
+    fontFamily: typography.fontFamilyBold,
+    color: colors.neutral[0],
+  },
+  smsBtn: {
+    backgroundColor: colors.primary[100],
+    borderWidth: 1,
+    borderColor: colors.primary[300],
+  },
+  smsBtnText: {
+    fontSize: 14,
+    fontFamily: typography.fontFamilyBold,
+    color: colors.primary[700],
+  },
+  ringActionBtn: {
+    backgroundColor: colors.secondary[100],
+    borderWidth: 1,
+    borderColor: colors.secondary[300],
+  },
+  ringActionBtnText: {
+    fontSize: 14,
+    fontFamily: typography.fontFamilyBold,
+    color: colors.secondary[700],
+  },
+  adminBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: '#FEF3C7',
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: radius.full,
+    borderWidth: 1,
+    borderColor: '#F59E0B',
+  },
+  adminBadgeText: {
+    fontSize: 10,
+    fontFamily: typography.fontFamilyBold,
+    color: '#92400E',
+  },
+  statusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: radius.full,
+    alignSelf: 'flex-start',
+  },
+  statusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  statusText: {
+    fontSize: 11,
+    fontFamily: typography.fontFamilyMedium,
   },
 });

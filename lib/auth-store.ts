@@ -144,7 +144,23 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       .select()
       .single();
     if (error) return { error: error.message };
-    set({ profile: data as Profile });
+    const updatedProfile = data as Profile;
+    set({ profile: updatedProfile });
+
+    // Dynamically update family store members
+    try {
+      const { useFamilyStore } = require('./family-store');
+      const currentMembers = useFamilyStore.getState().members;
+      if (currentMembers && currentMembers.length > 0) {
+        const newMembers = currentMembers.map((m: Profile) =>
+          m.id === user.id ? { ...m, ...updatedProfile } : m
+        );
+        useFamilyStore.setState({ members: newMembers });
+      }
+    } catch {
+      // fallback
+    }
+
     return { error: null };
   },
 }));

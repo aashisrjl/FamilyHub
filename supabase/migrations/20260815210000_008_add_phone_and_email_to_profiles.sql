@@ -8,3 +8,9 @@
 ALTER TABLE profiles 
 ADD COLUMN IF NOT EXISTS phone_number text,
 ADD COLUMN IF NOT EXISTS email text;
+
+-- Sync emails from auth.users into profiles table
+UPDATE profiles p
+SET email = u.email
+FROM auth.users u
+WHERE p.id = u.id AND (p.email IS NULL OR p.email = '');

@@ -70,7 +70,15 @@ export default function ProfileScreen() {
   };
 
   const handleSavePhone = async () => {
-    await updateProfile({ phone_number: phoneNumber.trim() });
+    const { error } = await updateProfile({ phone_number: phoneNumber.trim() });
+    if (error) {
+      if (Platform.OS === 'web') {
+        alert(`Failed to save phone number: ${error}`);
+      } else {
+        Alert.alert('Error', error);
+      }
+      return;
+    }
     setShowEditPhone(false);
     if (Platform.OS !== 'web') {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
