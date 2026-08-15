@@ -54,12 +54,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       return;
     }
     if (!data) {
-      // Auto-create profile on first login
-      const meta = user.user_metadata as { display_name?: string } | null;
-      const displayName = meta?.display_name ?? user.email?.split('@')[0] ?? 'Family Member';
+      // Auto-create profile on first login (e.g. Google OAuth)
+      const meta = user.user_metadata as { display_name?: string; full_name?: string; name?: string; avatar_url?: string; picture?: string } | null;
+      const displayName = meta?.display_name ?? meta?.full_name ?? meta?.name ?? user.email?.split('@')[0] ?? 'Family Member';
+      const avatarUrl = meta?.avatar_url ?? meta?.picture ?? null;
       const { data: newProfile } = await supabase
         .from('profiles')
-        .insert({ id: user.id, display_name: displayName })
+        .insert({ id: user.id, display_name: displayName, avatar_url: avatarUrl })
         .select()
         .single();
       set({ profile: newProfile as Profile | null });
