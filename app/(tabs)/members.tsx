@@ -44,13 +44,10 @@ import { calculateDistance, formatDistance } from '@/lib/location-utils';
 export default function MembersScreen() {
   const { user, profile, signOut, updateProfile, refreshProfile } = useAuthStore();
   const { family, members, membersReady, subscribe, incomingRing, clearIncomingRing, sendRingAlert, myLocation, updateMyLocation } = useFamilyStore();
-  const [showRingModal, setShowRingModal] = useState(false);
-  const [ringTarget, setRingTarget] = useState<string | null>(null);
   const [showStatusModal, setShowStatusModal] = useState(false);
   const [showEditName, setShowEditName] = useState(false);
   const [displayName, setDisplayName] = useState('');
   const [ringing, setRinging] = useState(false);
-  const [showRingAlert, setShowRingAlert] = useState(false);
   const [codeCopied, setCodeCopied] = useState(false);
   const [locating, setLocating] = useState(false);
   const [locationStatus, setLocationStatus] = useState<string | null>(null);
@@ -58,16 +55,6 @@ export default function MembersScreen() {
   useEffect(() => {
     if (family) subscribe(family.id);
   }, [family?.id]);
-
-  // Handle incoming ring
-  useEffect(() => {
-    if (incomingRing && incomingRing.sender_id !== user?.id) {
-      setShowRingAlert(true);
-      if (Platform.OS !== 'web') {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-      }
-    }
-  }, [incomingRing, user?.id]);
 
   const colorIndexFor = (id: string) => members.findIndex((m) => m.id === id);
 
@@ -80,7 +67,6 @@ export default function MembersScreen() {
     }
     setTimeout(() => {
       setRinging(false);
-      setShowRingModal(false);
     }, 800);
   };
 
@@ -115,11 +101,6 @@ export default function MembersScreen() {
     } catch {
       // silent
     }
-  };
-
-  const handleDismissRingAlert = () => {
-    setShowRingAlert(false);
-    clearIncomingRing();
   };
 
   const handleUpdateLocation = async () => {
@@ -396,22 +377,6 @@ export default function MembersScreen() {
           <Button label="Save" onPress={handleEditName} fullWidth size="lg" icon={<Check size={20} color={colors.neutral[0]} strokeWidth={2} />} />
         </View>
       </ModalBase>
-
-      {/* Incoming Ring Alert */}
-      <Modal visible={showRingAlert} transparent animationType="fade" onRequestClose={handleDismissRingAlert}>
-        <View style={styles.ringAlertOverlay}>
-          <View style={styles.ringAlertCard}>
-            <View style={styles.ringAlertIcon}>
-              <BellRing size={48} color={colors.neutral[0]} strokeWidth={2.5} />
-            </View>
-            <Text style={styles.ringAlertTitle}>Ring Ring!</Text>
-            <Text style={styles.ringAlertBody}>
-              {members.find((m) => m.id === incomingRing?.sender_id)?.display_name ?? 'A family member'} is ringing you.
-            </Text>
-            <Button label="Dismiss" onPress={handleDismissRingAlert} variant="secondary" fullWidth size="lg" />
-          </View>
-        </View>
-      </Modal>
     </View>
   );
 }
