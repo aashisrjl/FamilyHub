@@ -19,6 +19,7 @@ import {
   Circle,
   Bell,
   Heart,
+  Crown,
 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { getCurrentUserLocation } from '@/lib/location-utils';
@@ -159,6 +160,18 @@ export default function ProfileScreen() {
               <Text style={styles.settingLabel}>Family Name</Text>
             </View>
             <Text style={styles.settingValue}>{family?.name ?? 'Not in a family'}</Text>
+          </View>
+
+          <View style={styles.settingsDivider} />
+
+          <View style={styles.settingItem}>
+            <View style={styles.settingLeft}>
+              <Crown size={20} color="#D97706" strokeWidth={2} />
+              <Text style={styles.settingLabel}>Your Family Role</Text>
+            </View>
+            <Text style={styles.settingValue}>
+              {profile?.role === 'admin' || family?.created_by === user?.id ? '👑 Admin (Creator)' : 'Member'}
+            </Text>
           </View>
 
           <View style={styles.settingsDivider} />

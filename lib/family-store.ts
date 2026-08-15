@@ -29,6 +29,9 @@ interface FamilyState {
   updateMyLocation: (userId: string, senderName?: string) => Promise<{ latitude: number; longitude: number } | null>;
   broadcastLocationUpdate: (latitude: number, longitude: number, senderId: string, senderName: string) => void;
   setHomeLocation: (latitude: number, longitude: number, addressName?: string) => Promise<boolean>;
+  promoteToAdmin: (targetUserId: string) => Promise<boolean>;
+  demoteToMember: (targetUserId: string) => Promise<boolean>;
+  removeMember: (targetUserId: string) => Promise<boolean>;
   clearIncomingRing: () => void;
   clearSos: () => void;
   setMotorAlarmActive: (active: boolean) => void;
@@ -90,7 +93,7 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
       return { error: famError.message };
     }
 
-    const profileUpdateData: any = { family_id: fam.id };
+    const profileUpdateData: any = { family_id: fam.id, role: 'admin' };
     if (initialLoc) {
       profileUpdateData.latitude = initialLoc.latitude;
       profileUpdateData.longitude = initialLoc.longitude;
@@ -128,7 +131,7 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
     }
     const { error: profileError } = await supabase
       .from('profiles')
-      .update({ family_id: fam.id })
+      .update({ family_id: fam.id, role: 'member' })
       .eq('id', userId);
     if (profileError) {
       set({ error: profileError.message, loading: false });
@@ -480,6 +483,40 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
             }
           : null,
       }));
+      return true;
+    }
+    return false;
+  },
+
+  promoteToAdmin: async (targetUserId: string) => {
+    const { error } = await supabase.from('profiles').update({ role: 'admin' }).eq('id', targetUserId);
+    if (!error) {
+      set((state) => ({
+        members: state.members.map((m) => (m.id === targetUserId ? { ...m, role: 'admin' } : m)),
+      }));
+      return true;
+    }
+    return false;
+  },
+
+  demoteToMember: async (targetUserId: string) => {
+    const { error } = await supabase.from('profiles').update({ role: 'member' }).eq('id', targetUserId);
+    if (!error) {
+      set((state) => ({
+        members: state.members.map((m) => (m.id === targetUserId ? { ...m, role: 'member' } : m)),
+      }));
+      return true;
+    }
+    return false;
+  },
+
+  removeMember: async (targetUserId: string) => {
+    const { error } = await supabase.from('profiles').update({ family_id: null, role: 'member' }).eq('id', targetUserId);
+    if (!error) {
+      set((state) => ({
+        members: state.members.filter((m) => m.id !== targetUserId),
+      }));
+      return true;
     }
     return false;
   },

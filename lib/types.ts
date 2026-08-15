@@ -25,6 +25,7 @@ export interface Profile {
   display_name: string;
   avatar_url: string | null;
   status: MemberStatus;
+  role?: 'admin' | 'member';
   fcm_token: string | null;
   latitude?: number | null;
   longitude?: number | null;

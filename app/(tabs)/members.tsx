@@ -9,6 +9,7 @@ import {
   Share,
   Platform,
   TextInput,
+  Alert,
 } from 'react-native';
 import { Stack } from 'expo-router';
 import { useAuthStore } from '@/lib/auth-store';
@@ -37,6 +38,10 @@ import {
   MapPin,
   Navigation,
   Home,
+  Crown,
+  UserCheck,
+  UserX,
+  MoreVertical,
 } from 'lucide-react-native';
 import * as Clipboard from 'expo-clipboard';
 import * as Haptics from 'expo-haptics';
@@ -44,7 +49,21 @@ import { calculateDistance, formatDistance, getCurrentUserLocation } from '@/lib
 
 export default function MembersScreen() {
   const { user, profile, signOut, updateProfile, refreshProfile } = useAuthStore();
-  const { family, members, membersReady, subscribe, incomingRing, clearIncomingRing, sendRingAlert, myLocation, updateMyLocation, setHomeLocation } = useFamilyStore();
+  const {
+    family,
+    members,
+    membersReady,
+    subscribe,
+    incomingRing,
+    clearIncomingRing,
+    sendRingAlert,
+    myLocation,
+    updateMyLocation,
+    setHomeLocation,
+    promoteToAdmin,
+    demoteToMember,
+    removeMember,
+  } = useFamilyStore();
   const [ringing, setRinging] = useState(false);
   const [codeCopied, setCodeCopied] = useState(false);
   const [locating, setLocating] = useState(false);
@@ -120,6 +139,47 @@ export default function MembersScreen() {
     }
   };
 
+  const [selectedMember, setSelectedMember] = useState<typeof members[0] | null>(null);
+  const [showAdminModal, setShowAdminModal] = useState(false);
+
+  const isAmAdmin = profile?.role === 'admin' || family?.created_by === user?.id;
+
+  const handlePromoteAdmin = async (targetId: string) => {
+    await promoteToAdmin(targetId);
+    setShowAdminModal(false);
+    if (Platform.OS !== 'web') {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    }
+  };
+
+  const handleDemoteMember = async (targetId: string) => {
+    await demoteToMember(targetId);
+    setShowAdminModal(false);
+    if (Platform.OS !== 'web') {
+      Haptics.selectionAsync();
+    }
+  };
+
+  const handleRemoveMember = async (targetId: string, name: string) => {
+    if (Platform.OS === 'web') {
+      await removeMember(targetId);
+      setShowAdminModal(false);
+    } else {
+      Alert.alert('Remove Member', `Are you sure you want to remove ${name} from your family?`, [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: async () => {
+            await removeMember(targetId);
+            setShowAdminModal(false);
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+          },
+        },
+      ]);
+    }
+  };
+
   const handleSetHomeLocation = async () => {
     setLocating(true);
     setLocationStatus('Updating Family Home location...');
@@ -143,6 +203,7 @@ export default function MembersScreen() {
     const idx = colorIndexFor(item.id);
     const sc = statusColors[item.status];
     const isMe = item.id === user?.id;
+    const isMemberAdmin = item.role === 'admin' || family?.created_by === item.id;
 
     let distanceStr: string | null = null;
     if (!isMe && myLocation && typeof item.latitude === 'number' && typeof item.longitude === 'number') {
@@ -165,10 +226,19 @@ export default function MembersScreen() {
       <View style={styles.memberCard}>
         <Avatar name={item.display_name} size={52} status={item.status} colorIndex={idx} />
         <View style={styles.memberInfo}>
-          <Text style={styles.memberName}>
-            {item.display_name} {isMe && '(You)'}
-          </Text>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+            <Text style={styles.memberName}>
+              {item.display_name} {isMe && '(You)'}
+            </Text>
+            {isMemberAdmin && (
+              <View style={styles.adminBadge}>
+                <Crown size={12} color="#D97706" strokeWidth={2.5} />
+                <Text style={styles.adminBadgeText}>Admin</Text>
+              </View>
+            )}
+          </View>
+
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: 2 }}>
             <View style={[styles.statusBadge, { backgroundColor: sc.bg }]}>
               <View style={[styles.statusDot, { backgroundColor: sc.dot }]} />
               <Text style={[styles.statusText, { color: sc.text }]}>{statusLabels[item.status]}</Text>
@@ -190,16 +260,32 @@ export default function MembersScreen() {
             )}
           </View>
         </View>
-        {!isMe && (
-          <TouchableOpacity
-            style={styles.ringBtn}
-            onPress={() => handleRing(item.id)}
-            disabled={ringing}
-          >
-            <Bell size={18} color={colors.secondary[600]} strokeWidth={2} />
-            <Text style={styles.ringBtnText}>Ring</Text>
-          </TouchableOpacity>
-        )}
+
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          {!isMe && (
+            <TouchableOpacity
+              style={styles.ringBtn}
+              onPress={() => handleRing(item.id)}
+              disabled={ringing}
+            >
+              <Bell size={18} color={colors.secondary[600]} strokeWidth={2} />
+              <Text style={styles.ringBtnText}>Ring</Text>
+            </TouchableOpacity>
+          )}
+
+          {isAmAdmin && !isMe && (
+            <TouchableOpacity
+              style={styles.adminMoreBtn}
+              onPress={() => {
+                setSelectedMember(item);
+                setShowAdminModal(true);
+              }}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <MoreVertical size={20} color={colors.neutral[500]} strokeWidth={2} />
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
     );
   };
@@ -331,6 +417,43 @@ export default function MembersScreen() {
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
       />
+
+      {/* Admin Actions Modal */}
+      <ModalBase
+        visible={showAdminModal}
+        onClose={() => setShowAdminModal(false)}
+        title={`Manage ${selectedMember?.display_name ?? 'Member'}`}
+      >
+        {selectedMember && (
+          <View style={styles.adminModalContent}>
+            {selectedMember.role === 'admin' || family?.created_by === selectedMember.id ? (
+              <TouchableOpacity
+                style={styles.adminOptionBtn}
+                onPress={() => handleDemoteMember(selectedMember.id)}
+              >
+                <UserX size={20} color={colors.warning[600]} strokeWidth={2} />
+                <Text style={styles.adminOptionText}>Demote to Standard Member</Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                style={styles.adminOptionBtn}
+                onPress={() => handlePromoteAdmin(selectedMember.id)}
+              >
+                <UserCheck size={20} color={colors.success[600]} strokeWidth={2} />
+                <Text style={styles.adminOptionText}>Make Family Admin</Text>
+              </TouchableOpacity>
+            )}
+
+            <TouchableOpacity
+              style={[styles.adminOptionBtn, styles.adminOptionDanger]}
+              onPress={() => handleRemoveMember(selectedMember.id, selectedMember.display_name)}
+            >
+              <LogOut size={20} color={colors.error[500]} strokeWidth={2} />
+              <Text style={styles.adminOptionDangerText}>Remove from Family</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+      </ModalBase>
     </View>
   );
 }
@@ -719,36 +842,54 @@ const styles = StyleSheet.create({
     fontFamily: typography.fontFamilyBold,
     color: colors.secondary[600],
   },
-  // Status modal
-  statusOptions: {
-    gap: spacing.sm,
+  // Admin styles
+  adminBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: '#FEF3C7',
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: radius.full,
+    borderWidth: 1,
+    borderColor: '#F59E0B',
+  },
+  adminBadgeText: {
+    fontSize: 10,
+    fontFamily: typography.fontFamilyBold,
+    color: '#92400E',
+  },
+  adminMoreBtn: {
+    padding: spacing.xs,
+    borderRadius: radius.md,
+  },
+  adminModalContent: {
+    gap: spacing.md,
     paddingBottom: spacing.md,
   },
-  statusOption: {
+  adminOptionBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
-    paddingVertical: spacing.md + 2,
-    paddingHorizontal: spacing.lg,
-    borderRadius: radius.md,
-    borderWidth: 1.5,
-    borderColor: colors.neutral[200],
-  },
-  statusOptionText: {
-    flex: 1,
-    fontSize: 16,
-    fontFamily: typography.fontFamilyMedium,
-  },
-  // Name input
-  nameInput: {
-    borderWidth: 1.5,
-    borderColor: colors.neutral[200],
-    borderRadius: radius.md,
-    paddingHorizontal: spacing.md,
     paddingVertical: spacing.md,
-    fontSize: 16,
-    fontFamily: typography.fontFamilyRegular,
-    color: colors.neutral[900],
-    marginBottom: spacing.lg,
+    paddingHorizontal: spacing.lg,
+    borderRadius: radius.lg,
+    backgroundColor: colors.neutral[50],
+    borderWidth: 1,
+    borderColor: colors.neutral[200],
+  },
+  adminOptionText: {
+    fontSize: 15,
+    fontFamily: typography.fontFamilyBold,
+    color: colors.neutral[800],
+  },
+  adminOptionDanger: {
+    backgroundColor: colors.error[50],
+    borderColor: colors.error[200],
+  },
+  adminOptionDangerText: {
+    fontSize: 15,
+    fontFamily: typography.fontFamilyBold,
+    color: colors.error[600],
   },
 });
