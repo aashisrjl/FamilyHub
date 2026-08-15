@@ -21,9 +21,16 @@ import {
   Heart,
   Crown,
   Phone,
+  Volume2,
 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { getCurrentUserLocation } from '@/lib/location-utils';
+import {
+  requestNotificationPermissions,
+  playChime,
+  speakNotification,
+  showSystemNotification,
+} from '@/lib/sound-notifications';
 
 const statusLabels: Record<MemberStatus, string> = {
   online: 'Online',
@@ -49,6 +56,63 @@ export default function ProfileScreen() {
   const [showStatusModal, setShowStatusModal] = useState(false);
   const [locating, setLocating] = useState(false);
   const [locStatus, setLocStatus] = useState<string | null>(null);
+  const [notifPermission, setNotifPermission] = useState<boolean | null>(null);
+  const [locPermission, setLocPermission] = useState<boolean | null>(null);
+
+  const handleEnableNotifications = async () => {
+    const ok = await requestNotificationPermissions();
+    setNotifPermission(ok);
+    if (ok) {
+      showSystemNotification('Notification Permission Enabled', 'Sound and alarm notifications are active!');
+      playChime('success');
+      if (Platform.OS === 'web') {
+        alert('Notification & sound permissions turned on successfully!');
+      } else {
+        Alert.alert('Success', 'Notification & sound permissions turned on successfully!');
+      }
+    } else {
+      if (Platform.OS === 'web') {
+        alert('Permission denied or not granted.');
+      } else {
+        Alert.alert('Permission Denied', 'Please enable notifications in your phone device settings.');
+      }
+    }
+  };
+
+  const handleEnableLocation = async () => {
+    setLocating(true);
+    const loc = await getCurrentUserLocation();
+    setLocating(false);
+    if (loc) {
+      setLocPermission(true);
+      await updateMyLocation(user?.id ?? '', profile?.display_name);
+      setLocStatus('📍 Location permission granted & synced!');
+      if (Platform.OS === 'web') {
+        alert('Location permission granted and GPS position updated!');
+      } else {
+        Alert.alert('Success', 'Location permission granted and GPS position updated!');
+      }
+    } else {
+      setLocPermission(false);
+      setLocStatus('⚠️ Location permission denied.');
+      if (Platform.OS === 'web') {
+        alert('Could not access GPS location. Please check your location settings.');
+      } else {
+        Alert.alert('Permission Denied', 'Please grant location permission in phone settings.');
+      }
+    }
+  };
+
+  const handleTestSound = () => {
+    playChime('info');
+    speakNotification('Family Hub sound and alarm notification test successful.');
+    showSystemNotification('Sound & Vibration Test', 'Audio and notification alerts are working!');
+    if (Platform.OS === 'web' && typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+      navigator.vibrate([200, 100, 200]);
+    } else if (Platform.OS !== 'web') {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    }
+  };
 
   const colorIndexFor = (id: string) => members.findIndex((m) => m.id === id);
 
@@ -222,6 +286,84 @@ export default function ProfileScreen() {
               <Text style={styles.settingLabel}>Account Security</Text>
             </View>
             <Text style={styles.settingValue}>Protected</Text>
+          </View>
+        </View>
+
+        {/* Section: Mobile Permissions & Sound Controls */}
+        <Text style={styles.sectionTitle}>Permissions & Sound Settings</Text>
+        <View style={styles.settingsGroup}>
+          {/* Notification & Alarm Sound Permission */}
+          <View style={styles.settingItem}>
+            <View style={styles.settingLeft}>
+              <Bell size={20} color={colors.primary[600]} strokeWidth={2} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.settingLabel}>Notifications & Alarm Sounds</Text>
+                <Text style={styles.permissionSub}>
+                  {notifPermission === true
+                    ? '🟢 Active (Status bar & ring alerts)'
+                    : notifPermission === false
+                    ? '🔴 Permission denied'
+                    : 'Tap button to enable notification alerts'}
+                </Text>
+              </View>
+            </View>
+            <TouchableOpacity
+              style={[styles.permissionBtn, notifPermission === true && styles.permissionBtnActive]}
+              onPress={handleEnableNotifications}
+              activeOpacity={0.8}
+            >
+              <Text style={[styles.permissionBtnText, notifPermission === true && styles.permissionBtnTextActive]}>
+                {notifPermission === true ? 'Turned On' : 'Turn On'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.settingsDivider} />
+
+          {/* Location Permission */}
+          <View style={styles.settingItem}>
+            <View style={styles.settingLeft}>
+              <MapPin size={20} color={colors.secondary[600]} strokeWidth={2} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.settingLabel}>GPS Location Access</Text>
+                <Text style={styles.permissionSub}>
+                  {locPermission === true
+                    ? '🟢 Active (GPS location synced)'
+                    : locPermission === false
+                    ? '🔴 Permission denied'
+                    : 'Tap button to grant GPS permission'}
+                </Text>
+              </View>
+            </View>
+            <TouchableOpacity
+              style={[styles.permissionBtn, locPermission === true && styles.permissionBtnActive]}
+              onPress={handleEnableLocation}
+              activeOpacity={0.8}
+            >
+              <Text style={[styles.permissionBtnText, locPermission === true && styles.permissionBtnTextActive]}>
+                {locPermission === true ? 'Turned On' : 'Turn On'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.settingsDivider} />
+
+          {/* Test Sound & Vibration */}
+          <View style={styles.settingItem}>
+            <View style={styles.settingLeft}>
+              <Volume2 size={20} color={colors.success[600]} strokeWidth={2} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.settingLabel}>Sound & Alarm Test</Text>
+                <Text style={styles.permissionSub}>Test chime sound, speech & vibration</Text>
+              </View>
+            </View>
+            <TouchableOpacity
+              style={styles.permissionBtnSuccess}
+              onPress={handleTestSound}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.permissionBtnSuccessText}>Test</Text>
+            </TouchableOpacity>
           </View>
         </View>
 
@@ -544,5 +686,42 @@ const styles = StyleSheet.create({
     fontFamily: typography.fontFamilyRegular,
     color: colors.neutral[900],
     marginBottom: spacing.lg,
+  },
+  permissionSub: {
+    fontSize: 11,
+    fontFamily: typography.fontFamilyMedium,
+    color: colors.neutral[500],
+    marginTop: 2,
+  },
+  permissionBtn: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs + 2,
+    borderRadius: radius.sm,
+    backgroundColor: colors.primary[50],
+    borderWidth: 1,
+    borderColor: colors.primary[200],
+  },
+  permissionBtnActive: {
+    backgroundColor: colors.success[50],
+    borderColor: colors.success[300],
+  },
+  permissionBtnText: {
+    fontSize: 12,
+    fontFamily: typography.fontFamilyBold,
+    color: colors.primary[700],
+  },
+  permissionBtnTextActive: {
+    color: colors.success[700],
+  },
+  permissionBtnSuccess: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs + 2,
+    borderRadius: radius.sm,
+    backgroundColor: colors.success[600],
+  },
+  permissionBtnSuccessText: {
+    fontSize: 12,
+    fontFamily: typography.fontFamilyBold,
+    color: colors.neutral[0],
   },
 });
