@@ -118,9 +118,30 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
         .eq('id', familyId)
         .single()
         .then(({ data }) => {
-          if (data) set({ family: data as Family });
+          if (data) {
+            const fam = data as Family;
+            set({ family: fam, isGateLocked: fam.is_gate_locked ?? true });
+          }
         });
     }
+
+    // Subscribe to DB changes on families table (for real-time gate persistence across all devices)
+    const familyDbSub = supabase
+      .channel(`fam-db-${familyId}`)
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'families', filter: `id=eq.${familyId}` },
+        (payload) => {
+          if (payload.new) {
+            const updatedFam = payload.new as Family;
+            set({
+              family: updatedFam,
+              isGateLocked: updatedFam.is_gate_locked ?? get().isGateLocked,
+            });
+          }
+        }
+      )
+      .subscribe();
 
     // Subscribe to members
     const membersSub = supabase
@@ -228,7 +249,7 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
       .subscribe();
 
     activeGateChannel = gateSub;
-    subscriptions = [membersSub, motorSub, sosSub, ringSub, gateSub];
+    subscriptions = [familyDbSub, membersSub, motorSub, sosSub, ringSub, gateSub];
   },
 
   /** Full reset — only call on sign-out */
@@ -250,8 +271,14 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
   },
 
   toggleGate: (senderName) => {
+    const famId = get().family?.id;
     const nextState = !get().isGateLocked;
     set({ isGateLocked: nextState });
+
+    if (famId) {
+      supabase.from('families').update({ is_gate_locked: nextState }).eq('id', famId).then();
+    }
+
     if (activeGateChannel) {
       activeGateChannel.send({
         type: 'broadcast',

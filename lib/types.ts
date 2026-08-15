@@ -12,6 +12,7 @@ export interface Family {
   code: string;
   created_by: string;
   created_at: string;
+  is_gate_locked?: boolean;
 }
 
 export interface Profile {
