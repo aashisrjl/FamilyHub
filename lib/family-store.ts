@@ -19,19 +19,21 @@ interface FamilyState {
   subscribe: (familyId: string) => void;
   unsubscribe: () => void;
   fetchMotorSession: (familyId: string) => Promise<void>;
-  toggleGate: () => boolean;
+  toggleGate: (senderName?: string) => boolean;
   clearIncomingRing: () => void;
   clearSos: () => void;
 }
 
 let subscriptions: { unsubscribe: () => void }[] = [];
 let subscribedFamilyId: string | null = null;
+let activeGateChannel: ReturnType<typeof supabase.channel> | null = null;
 
 /** Tear down realtime channels WITHOUT wiping cached data. */
 function dropChannels() {
   subscriptions.forEach((s) => s.unsubscribe());
   subscriptions = [];
   subscribedFamilyId = null;
+  activeGateChannel = null;
 }
 
 export const useFamilyStore = create<FamilyState>((set, get) => ({
@@ -203,7 +205,7 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
       )
       .subscribe();
 
-    // Subscribe to ring alerts (only targeted at me or all)
+    // Subscribe to ring alerts
     const ringSub = supabase
       .channel(`ring-${familyId}`)
       .on(
@@ -215,7 +217,18 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
       )
       .subscribe();
 
-    subscriptions = [membersSub, motorSub, sosSub, ringSub];
+    // Subscribe to realtime gate lock/unlock broadcast
+    const gateSub = supabase
+      .channel(`gate-${familyId}`, { config: { broadcast: { self: false } } })
+      .on('broadcast', { event: 'gate_toggle' }, (payload) => {
+        if (payload?.payload?.isGateLocked !== undefined) {
+          set({ isGateLocked: payload.payload.isGateLocked });
+        }
+      })
+      .subscribe();
+
+    activeGateChannel = gateSub;
+    subscriptions = [membersSub, motorSub, sosSub, ringSub, gateSub];
   },
 
   /** Full reset — only call on sign-out */
@@ -236,9 +249,16 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
     set({ activeMotorSession: data as MotorSession | null });
   },
 
-  toggleGate: () => {
+  toggleGate: (senderName) => {
     const nextState = !get().isGateLocked;
     set({ isGateLocked: nextState });
+    if (activeGateChannel) {
+      activeGateChannel.send({
+        type: 'broadcast',
+        event: 'gate_toggle',
+        payload: { isGateLocked: nextState, sender_name: senderName ?? 'Family Member' },
+      });
+    }
     return nextState;
   },
 

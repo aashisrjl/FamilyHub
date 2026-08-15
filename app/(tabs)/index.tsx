@@ -102,7 +102,7 @@ export default function DashboardScreen() {
 
   // Gate Lock/Unlock Handler
   const handleToggleGate = () => {
-    const nextLocked = toggleGate();
+    const nextLocked = toggleGate(profile?.display_name);
     if (Platform.OS !== 'web') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     }
