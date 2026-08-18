@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { StyleSheet, View, Text, TouchableOpacity, ScrollView, TextInput, Alert, Platform } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { useAuthStore } from '@/lib/auth-store';
@@ -25,14 +25,15 @@ import {
   Mail,
 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
-import { getCurrentUserLocation } from '@/lib/location-utils';
+import { getCurrentUserLocation, checkLocationPermissions } from '@/lib/location-utils';
 import {
   requestNotificationPermissions,
+  checkNotificationPermissions,
   playChime,
   speakNotification,
   showSystemNotification,
 } from '@/lib/sound-notifications';
-import { getResendApiKey, setResendApiKey } from '@/lib/email-service';
+
 
 const statusLabels: Record<MemberStatus, string> = {
   online: 'Online',
@@ -48,7 +49,7 @@ const statusColors: Record<MemberStatus, { dot: string; bg: string; text: string
 
 export default function ProfileScreen() {
   const router = useRouter();
-  const { user, profile, signOut, updateProfile, refreshProfile } = useAuthStore();
+  const { user, profile, signOut, updateProfile } = useAuthStore();
   const { family, members, myLocation, updateMyLocation } = useFamilyStore();
 
   const [showEditName, setShowEditName] = useState(false);
@@ -60,16 +61,15 @@ export default function ProfileScreen() {
   const [locStatus, setLocStatus] = useState<string | null>(null);
   const [notifPermission, setNotifPermission] = useState<boolean | null>(null);
   const [locPermission, setLocPermission] = useState<boolean | null>(null);
-  const [showResendModal, setShowResendModal] = useState(false);
-  const [resendInput, setResendInput] = useState(getResendApiKey() ?? '');
 
-  const handleSaveResendKey = () => {
-    setResendApiKey(resendInput);
-    setShowResendModal(false);
-    if (Platform.OS !== 'web') {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    }
-  };
+  // Auto-detect existing system permissions on mount so user isn't prompted repeatedly
+  useEffect(() => {
+    checkNotificationPermissions().then((granted) => setNotifPermission(granted));
+    checkLocationPermissions().then((granted) => setLocPermission(granted));
+  }, []);
+
+
+
 
   const handleEnableNotifications = async () => {
     const ok = await requestNotificationPermissions();
@@ -377,31 +377,8 @@ export default function ProfileScreen() {
               <Text style={styles.permissionBtnSuccessText}>Test</Text>
             </TouchableOpacity>
           </View>
-
-          <View style={styles.settingsDivider} />
-
-          {/* Resend Email Notifications */}
-          <View style={styles.settingItem}>
-            <View style={styles.settingLeft}>
-              <Mail size={20} color={colors.primary[600]} strokeWidth={2} />
-              <View style={{ flex: 1 }}>
-                <Text style={styles.settingLabel}>Gmail & Email Alerts (Resend)</Text>
-                <Text style={styles.permissionSub}>
-                  {getResendApiKey()
-                    ? '🟢 Active (Live Resend API key configured)'
-                    : '🟡 Simulated mode (Tap to set Resend API key)'}
-                </Text>
-              </View>
-            </View>
-            <TouchableOpacity
-              style={styles.permissionBtn}
-              onPress={() => setShowResendModal(true)}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.permissionBtnText}>Configure</Text>
-            </TouchableOpacity>
-          </View>
         </View>
+
 
         {/* Section: GPS & Location Settings */}
         <Text style={styles.sectionTitle}>Location Sync</Text>
@@ -501,27 +478,10 @@ export default function ProfileScreen() {
           />
         </View>
       </ModalBase>
-
-      {/* Resend API Key Modal */}
-      <ModalBase visible={showResendModal} onClose={() => setShowResendModal(false)} title="Resend Email Service Setup">
-        <View>
-          <Text style={{ fontSize: 13, color: colors.neutral[600], marginBottom: 12, lineHeight: 18 }}>
-            FamilyHub uses Resend to deliver real-time emergency alert emails directly to family Gmail inboxes.
-          </Text>
-          <TextInput
-            style={styles.nameInput}
-            placeholder="Paste your Resend API Key (re_...)"
-            placeholderTextColor={colors.neutral[400]}
-            value={resendInput}
-            onChangeText={setResendInput}
-            autoCapitalize="none"
-          />
-          <Button label="Save Resend Key" onPress={handleSaveResendKey} fullWidth size="lg" />
-        </View>
-      </ModalBase>
     </View>
   );
 }
+
 
 const styles = StyleSheet.create({
   container: {

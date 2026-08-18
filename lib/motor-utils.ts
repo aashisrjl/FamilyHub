@@ -2,6 +2,7 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 import { supabase } from './supabase';
 import type { MotorSession, TankType } from './types';
 import { useFamilyStore } from './family-store';
+import { sendMotorEmail } from './email-service';
 
 interface UseMotorTimerResult {
   remainingSeconds: number;
@@ -89,6 +90,8 @@ export async function startMotorSession(
     const session = data as MotorSession;
     useFamilyStore.setState({ activeMotorSession: session });
     useFamilyStore.getState().broadcastMotorAction('start', session, tank, senderName);
+    // Send email alert behind the scenes
+    sendMotorEmail(familyId, senderName || 'Family Member', 'start', tank, durationMinutes);
   }
 
   // Refetch to guarantee sync
@@ -105,9 +108,17 @@ export async function stopMotorSession(
   familyId?: string,
   senderName?: string
 ): Promise<{ error: string | null }> {
+  const currentSession = useFamilyStore.getState().activeMotorSession;
+  const tank = currentSession?.tank || 'top';
+  
   // Instantly clear local state so UI updates without delay or refresh
   useFamilyStore.setState({ activeMotorSession: null });
   useFamilyStore.getState().broadcastMotorAction('stop', null, undefined, senderName);
+
+  if (familyId) {
+    // Send email alert behind the scenes
+    sendMotorEmail(familyId, senderName || 'Family Member', 'stop', tank);
+  }
 
   const { error } = await supabase
     .from('motor_sessions')
@@ -120,3 +131,4 @@ export async function stopMotorSession(
 
   return { error: error?.message ?? null };
 }
+

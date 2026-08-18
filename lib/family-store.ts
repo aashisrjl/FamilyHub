@@ -5,7 +5,8 @@ import { generateFamilyCode } from './helpers';
 import { notifyMotorAction, notifyGateToggle, stopContinuousAlarm, notifyProximityAlert, notifyHomeArrival, notifyHomeDeparture } from './sound-notifications';
 import { getCurrentUserLocation, updateUserLocationInDB, calculateDistance, formatDistance } from './location-utils';
 import { sendExpoPushNotification } from './push-notifications';
-import { sendEmergencyEmailToFamily } from './email-service';
+import { sendEmergencyEmailToFamily, sendRingUserEmail } from './email-service';
+
 
 interface FamilyState {
   family: Family | null;
@@ -470,7 +471,11 @@ export const useFamilyStore = create<FamilyState>((set, get) => ({
         { type: 'ring', senderId }
       );
     }
+
+    // Trigger ring email notification behind the scenes
+    sendRingUserEmail(famId, senderId, senderName, targetId);
   },
+
 
   updateMyLocation: async (userId: string, senderName?: string) => {
     const loc = await getCurrentUserLocation();

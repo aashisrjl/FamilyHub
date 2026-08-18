@@ -54,7 +54,24 @@ if (Platform.OS === 'web' && typeof window !== 'undefined') {
   window.addEventListener('touchstart', unlockAudio);
 }
 
+/** Check if system notification permissions are currently granted without prompting */
+export async function checkNotificationPermissions(): Promise<boolean> {
+  if (Platform.OS === 'web' && typeof window !== 'undefined' && 'Notification' in window) {
+    return Notification.permission === 'granted';
+  }
+  if (Platform.OS !== 'web') {
+    try {
+      const { status } = await Notifications.getPermissionsAsync();
+      return status === 'granted';
+    } catch {
+      return false;
+    }
+  }
+  return false;
+}
+
 /** Request system notification permissions for Web and Native mobile */
+
 export async function requestNotificationPermissions(): Promise<boolean> {
   let granted = false;
 

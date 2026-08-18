@@ -27,7 +27,25 @@ export function formatDistance(meters: number): string {
   return `${(meters / 1000).toFixed(1)} km away`;
 }
 
+/** Check if location permissions are currently granted without prompting */
+export async function checkLocationPermissions(): Promise<boolean> {
+  try {
+    if (Platform.OS === 'web' && typeof window !== 'undefined' && navigator.permissions) {
+      const res = await navigator.permissions.query({ name: 'geolocation' });
+      return res.state === 'granted';
+    }
+    if (Platform.OS !== 'web') {
+      const { status } = await Location.getForegroundPermissionsAsync();
+      return status === 'granted';
+    }
+  } catch {
+    // fallback
+  }
+  return false;
+}
+
 /** Request location permissions and fetch current device coordinates */
+
 export async function getCurrentUserLocation(): Promise<{ latitude: number; longitude: number } | null> {
   try {
     if (Platform.OS === 'web' && typeof window !== 'undefined' && navigator.geolocation) {

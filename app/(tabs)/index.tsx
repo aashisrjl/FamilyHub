@@ -16,7 +16,8 @@ import {
   startContinuousAlarm,
 } from '@/lib/sound-notifications';
 import { sendExpoPushNotification } from '@/lib/push-notifications';
-import { sendEmergencyEmailToFamily } from '@/lib/email-service';
+import { sendEmergencyEmailToFamily, sendMotorEmail, sendTimerAlarmEmail } from '@/lib/email-service';
+
 import { Avatar } from '@/components/Avatar';
 import { Button } from '@/components/Button';
 import { ModalBase } from '@/components/ModalBase';
@@ -181,6 +182,7 @@ export default function DashboardScreen() {
   const handleMotorExpire = useCallback(async (session: typeof activeMotorSession) => {
     if (!session) return;
     useFamilyStore.getState().broadcastMotorAction('expire', null, session.tank, profile?.display_name);
+    sendMotorEmail(session.family_id, profile?.display_name || 'Family Member', 'expire', session.tank);
     await stopMotorSession(session.id, session.family_id, profile?.display_name);
     useFamilyStore.getState().setMotorAlarmActive(true);
     notifyMotorAction('expire');
@@ -203,13 +205,17 @@ export default function DashboardScreen() {
           `Alarm "${activeAlarm.title}" timer completed!`,
           `Attention! Alarm timer for ${activeAlarm.title} is finished!`
         );
+        if (family?.id) {
+          sendTimerAlarmEmail(family.id, activeAlarm.title, profile?.display_name || 'Family Member');
+        }
         setActiveAlarm(null);
       }
     };
     updateAlarm();
     const interval = setInterval(updateAlarm, 1000);
     return () => clearInterval(interval);
-  }, [activeAlarm]);
+  }, [activeAlarm, family?.id, profile?.display_name]);
+
 
   // Gate Lock/Unlock Handler
   const handleToggleGate = () => {
